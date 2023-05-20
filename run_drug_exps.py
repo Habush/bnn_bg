@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/usr/bin/python3
 
 from utils.drug_exp_utils import *
 from multiprocessing import Pool
