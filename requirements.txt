@@ -1,0 +1,16 @@
+numpy
+pandas
+scipy
+scikit-learn
+matplotlib
+jaxlib
+jax
+optax
+dm-haiku
+jraph
+torch
+tensorflow_probability
+tqdm
+optuna
+pyyaml
+category_encoders
