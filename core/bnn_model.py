@@ -1,11 +1,7 @@
 import tensorflow_probability.substrates.jax as tfp
 tfd = tfp.distributions
-import jax
-import jax.numpy as jnp
-import haiku as hk
-import optax
-from optim_util import *
-from typing import NamedTuple, Optional, Tuple, Callable, Union
+from optim import *
+from typing import NamedTuple
 from jax.random import PRNGKey
 
 def get_prior(prior_name, scale):

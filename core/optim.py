@@ -1,13 +1,14 @@
 """Optax implementations of SGMCMC optimizers."""
 
-import jax
-from optax import Params
-from jax import numpy as jnp
-import optax
-from optax import GradientTransformation
 from typing import Any, NamedTuple
-from utils import tree_utils
 import haiku as hk
+import jax
+import optax
+from jax import numpy as jnp
+from optax import GradientTransformation
+
+from utils import tree_utils
+
 
 class TrainingState(NamedTuple):
     params: hk.Params
