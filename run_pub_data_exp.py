@@ -12,7 +12,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run experiments on public data")
     parser.add_argument("--data_dir", type=str, default="./data/pub_data",
                         help="Path to the directory containing the data")
-    parser.add_argument("--exp_dir", type=str, default="./data/exp_data/pub_data",
+    parser.add_argument("--exp_dir", type=str, default="./data/pub_data/exps",
                         help="Path to the directory where the experiment data will be saved")
     parser.add_argument("--seeds", type=str, help="Path to the file containing the seeds",
                         default="./data/seeds.txt")

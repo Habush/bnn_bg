@@ -296,7 +296,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run experiments on GDSC drug sensitivity data")
     parser.add_argument("--data_dir", type=str, default="./data/gdsc",
                         help="Path to the directory where the data is stored. Each seed should be in a separate line")
-    parser.add_argument("--exp_dir", type=str, default="./data/gdsc",
+    parser.add_argument("--exp_dir", type=str, default="./data/gdsc/exps",
                         help="Path to the directory where the experiment data will be saved")
     parser.add_argument("--seeds", type=str, help="Path to the file containing the seeds")
     parser.add_argument("--version", type=str, default="1", help="Version of the current experiment - useful for "
