@@ -106,7 +106,6 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_train, X_val, X_test
     prior_dist = hyperparam_config["prior_dist"]
     beta, M = hyperparam_config["beta"], hyperparam_config["num_models"]
     epochs = hyperparam_config["epochs"]
-    dropout_version = hyperparam_config["dropout_version"]
 
     if bg:
         config_path = f"{save_dir}/configs/bg_bnn_config_s_{seed}_optuna_v{version}.pkl"
@@ -145,12 +144,17 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_train, X_val, X_test
     data_loader = NumpyLoader(NumpyData(X_train_outer, y_train_outer), batch_size=batch_size, shuffle=True,
                               drop_last=True)
 
-    bnn_model, bnn_states, bnn_disc_states = train_bnn_model(seed, data_loader, epochs,
+    bnn_model, train_states = train_bnn_model(seed, data_loader, epochs,
                                                                          num_cycles,
                                                                          beta, M, lr_0, disc_lr_0, hidden_sizes,temp,
                                                                          sigma_1, sigma_2, eta, mu, J, act_fn,
                                                                          show_pgbar=False,
                                                                          prior_dist=prior_dist)
+
+    bnn_states, bnn_disc_states = [], []
+    for state in train_states:
+        bnn_states.append(state.params)
+        bnn_disc_states.append(state.gamma)
 
     rmse, r2 = score_bg_bnn_model(bnn_model, X_test, y_test, bnn_states,
                                                           bnn_disc_states)
@@ -166,7 +170,6 @@ def cross_val_runs(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     gene_list = X.columns.to_list()
-    use_laplacian = configs["use_laplacian"]
 
     for seed in tqdm(seeds):
         bnn_rf_bg_dict = {"seed": [], "model": [], "test_rmse": [], "test_r2_score": []}
@@ -183,8 +186,7 @@ def cross_val_runs(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
             col_idxs = np.load(col_idx_path)
 
         else:
-            J, col_idxs = get_inferred_network(X_train_outer, tissue_motif_data, string_ppi, hgnc_map, gene_list,
-                                               laplacian=use_laplacian)
+            J, col_idxs = get_inferred_network(X_train_outer, tissue_motif_data, string_ppi, hgnc_map, gene_list)
             np.save(graph_path, J)
             np.save(col_idx_path, col_idxs)
 
@@ -237,7 +239,7 @@ def cross_val_runs(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
             pickle.dump(rf_model, open(rf_model_path, "wb"))
 
 
-        rmse_test_rf, r2_test_rf = eval_sklearn_model(rf_model, X_test, y_test, y_mean=mean_y_train, y_std=std_y_train)
+        rmse_test_rf, r2_test_rf = eval_sklearn_model(rf_model, X_test, y_test)
 
         bnn_rf_bg_dict["seed"].append(seed)
         bnn_rf_bg_dict["model"].append("RF")
@@ -267,8 +269,8 @@ def cross_val_runs(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
 
 
 
-def cross_val_horseshoe_bnn(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
-                      version, save_dir, model_save_dir, saved_config=False, n_trial=7, **configs):
+def cross_val_horseshoe_bnn(seeds, X, y, version, save_dir, model_save_dir,
+                            saved_config=False, n_trial=7, **configs):
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     gene_list = X.columns.to_list()

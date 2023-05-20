@@ -1,31 +1,3 @@
-# coding=utf-8
-# Copyright 2022 The Google Research Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# Copyright 2020 The Google Research Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Optax implementations of SGMCMC optimizers."""
 
 import jax
@@ -34,7 +6,7 @@ from jax import numpy as jnp
 import optax
 from optax import GradientTransformation
 from typing import Any, NamedTuple
-import tree_utils
+from utils import tree_utils
 import haiku as hk
 
 class TrainingState(NamedTuple):
@@ -148,55 +120,6 @@ def sgld_gradient_update(step_size_fn,
         updates = preconditioner.multiply_by_m_inv(momentum, preconditioner_state)
         updates = jax.tree_map(lambda m: m * lr_sqrt, updates)
         return updates, OptaxSGLDState(
-            count=state.count + 1,
-            momentum=momentum,
-            preconditioner_state=preconditioner_state)
-
-    return GradientTransformation(init_fn, update_fn)
-
-
-def disc_sgd_gradient_update(step_size_fn,
-                             momentum_decay=0.,
-                             preconditioner=None):
-    """Optax implementation of the SGD optimizer.
-    """
-
-    if preconditioner is None:
-        preconditioner = get_identity_preconditioner()
-
-    def init_fn(gamma):
-        return OptaxSGLDState(
-            count=jnp.zeros([], jnp.int32),
-            momentum=jax.tree_map(jnp.zeros_like, gamma),
-            preconditioner_state=preconditioner.init(gamma))
-
-    def update_fn(key, gamma, gradient, state):
-        lr = step_size_fn(state.count)
-        lr_sqrt = jnp.sqrt(lr)
-
-        preconditioner_state = preconditioner.update_preconditioner(
-            gradient, state.preconditioner_state)
-
-        def update_momentum(m, g):
-            return momentum_decay * m + g * lr_sqrt
-
-        def proposal(theta, g, step_size):
-            diff = (0.5*g*-(2*theta - 1)) - (1./(2*step_size))
-            prob = jax.nn.sigmoid(diff)
-            prob_inv = 1 - prob
-            prob = prob[...,None]
-            prob_inv = prob_inv[...,None]
-            delta = jnp.argmax(jnp.concatenate([prob, prob_inv], axis=1), axis=-1)
-
-            theta_delta = (1 - theta)*delta + theta*(1 - delta)
-            return theta_delta*1.
-
-        momentum = jax.tree_map(update_momentum, state.momentum, gradient)
-        updates = preconditioner.multiply_by_m_inv(momentum, preconditioner_state)
-        updates = jax.tree_map(lambda m: m * lr_sqrt, updates)
-        gamma = proposal(gamma, updates, lr)
-
-        return gamma, OptaxSGLDState(
             count=state.count + 1,
             momentum=momentum,
             preconditioner_state=preconditioner_state)
