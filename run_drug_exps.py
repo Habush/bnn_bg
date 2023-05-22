@@ -22,8 +22,8 @@ def parse_args():
     parser.add_argument("--num_layers", type=int, default=1, help="Number of hidden layers")
     parser.add_argument("--prior_dist", default="laplace", const="laplace", nargs="?", choices=["laplace", "normal", "student_t"]
                         ,help="Prior distribution for the weights. Options: laplace, normal, student_t")
-    parser.add_argument("--act_fn", default="swish", const="swish", nargs="?", choices=["swish", "relu", "tanh", "sigmoid"],
-                        help="Activation function for the hidden layers. Options: swish, relu, tanh, sigmoid")
+    parser.add_argument("--act_fn", default="swish", const="swish", nargs="?", choices=["swish", "relu"],
+                        help="Activation function for the hidden layers. Options: swish, relu")
 
     parser.add_argument("--timeout", type=int, default=180, help="Timeout for hyperparameter optimization")
     parser.add_argument("--n_trials", type=int, default=50, help="Number of trials for hyperparameter optimization")
@@ -42,6 +42,8 @@ drug_ids = [1007, 1558, 1199, 1191, 1089,
                                                 # Bortezomib, Oxaliplatin, Erlotinib, Nilotinib,
                                                 # Irinotecan, "Paclitaxel", "Rapamycin"
 
+
+
 def run_single_drug(drug_id, args, seeds):
 
     data_dir = args.data_dir
@@ -53,22 +55,22 @@ def run_single_drug(drug_id, args, seeds):
     tissue_motif_data, string_ppi, hgnc2ens_map, X, target, \
     drug_name, save_dir, model_save_dir = load_gdsc_cancer_data(drug_id, data_dir, exp_dir)
 
+    hbnn_config_file = f"{data_dir}/horseshoeBNN_config.yaml"
     hp_configs = {"epochs": args.num_epochs, "act_fn": args.act_fn,
                   "beta": 0.25, "num_hidden": args.num_hidden,
                   "num_models": 1, "prior_dist": args.prior_dist,
-                  "horseshoe_config_file": f"{data_dir}/uci/horseshoeBNN_config.yaml",
+                  "horseshoe_config_file": hbnn_config_file,
                   "drug_name": drug_name, "data_dir": data_dir,
                   "saved_config": saved_config, "use_horseshoe_bnn": use_horseshoe_bnn}
 
     print(f"Configs: {hp_configs}")
 
     if use_horseshoe_bnn:
-        cross_val_runs(seeds, X, target, tissue_motif_data, string_ppi,
-                       hgnc2ens_map, args.version,
+        cross_val_horseshoe_bnn(seeds, X, target, args.version,
                        save_dir, model_save_dir,
                        timeout=args.timeout, n_trials=args.n_trials, **hp_configs)
     else:
-        cross_val_horseshoe_bnn(seeds, X, target,
+        cross_val_runs(seeds, X, target, tissue_motif_data, string_ppi, hgnc2ens_map, args.version,
                               save_dir, model_save_dir,
                               timeout=args.timeout, n_trials=args.n_trials, **hp_configs)
     print(f"Done for drug: {drug_id}/{drug_name}")
@@ -81,9 +83,6 @@ if __name__ == "__main__":
         for line in fp:
             seeds.append(int(line.strip()))
 
-    drug_ids = [int(drug_id) for drug_id in  args.drug_ids.split(",")]
-    exp_fn = functools.partial(run_single_drug, args=args, seeds=seeds)
-    pool = Pool(len(drug_ids))
-    pool.map(exp_fn, drug_ids)
-    pool.close()
-    pool.join()
+    for drug_id in drug_ids:
+        exp_fn = functools.partial(run_single_drug, args=args, seeds=seeds)
+        exp_fn(drug_id)

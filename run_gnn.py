@@ -2,15 +2,17 @@
 import argparse
 import functools
 import pickle
-from typing import Any, Tuple, Dict, List, Callable, Sequence
-import haiku as hk
-import jraph
+from typing import Any, Dict, List, Callable, Tuple, Sequence
+
 import optax
+import haiku as hk
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
+
 from core import gnn_models
 from utils.data_utils import *
-
+from utils.drug_exp_utils import get_inferred_network
+import jraph
 
 def get_edges_from_adj_matrix(J):
     p = J.shape[0]
@@ -240,7 +242,8 @@ def evaluate(rng: jax.random.PRNGKey, dataset: List[Dict[str, Any]],
     rmse = jnp.sqrt(jnp.mean((targets - preds) ** 2))
     return rmse
 
-def run_gnn(seeds, save_dir, model_save_dir, version,
+def run_gnn(seeds, tissue_motif_data, string_ppi, hgnc_map,
+            save_dir, model_save_dir, version,
             X, y, **model_configs):
     """Run GNN on the dataset"""
 
@@ -252,6 +255,8 @@ def run_gnn(seeds, save_dir, model_save_dir, version,
     layer_norm = model_configs["layer_norm"]
     net_types = model_configs["net_type"]
 
+    gene_list = X.columns.to_list()
+
     for seed in tqdm(seeds):
         rng = jax.random.PRNGKey(seed)
         res_dict = {"seed": [], "model": [], "test_rmse": []}
@@ -259,8 +264,17 @@ def run_gnn(seeds, save_dir, model_save_dir, version,
         X_train_outer, _, _, X_test, \
             y_train_outer, _, _, y_test, (_, _, _) = preprocess_data(seed, X, y, None, transformer,
                                                                      val_size=0.2, test_size=0.2)
-        J = np.load(f"{save_dir}/pandas/pandas_net_s_{seed}.npy")
-        col_idxs = np.load(f"{save_dir}/pandas/pandas_col_idxs_s_{seed}.npy")
+
+        graph_path, col_idx_path = f"{save_dir}/pandas/pandas_net_s_{seed}.npy", f"{save_dir}/pandas/pandas_col_idxs_s_{seed}.npy"
+        if os.path.exists(graph_path) and os.path.exists(col_idx_path):
+            J = np.load(graph_path)
+            col_idxs = np.load(col_idx_path)
+
+        else:
+            J, col_idxs = get_inferred_network(X_train_outer, tissue_motif_data, string_ppi, hgnc_map, gene_list)
+            np.save(graph_path, J)
+            np.save(col_idx_path, col_idxs)
+
         X_train_outer, X_test = X_train_outer[:, col_idxs], X_test[:, col_idxs]
 
         senders, receivers, edges = get_edges_from_adj_matrix(J)
@@ -306,17 +320,18 @@ def parse_args():
     parser.add_argument("--num_layers", type=int, default=3, help="Number of hidden layers")
     parser.add_argument("--message_passing_steps", type=int, default=3, help="Number of message passing steps")
     parser.add_argument("--skip_connections", default='0', const='0', nargs='?', choices=['0', '1'])
-    parser.add_argument("--layer_norm", default='0', const='0', nargs='?', choices=['0', '1'])
+    parser.add_argument("--layer_norm", default='1', const='1', nargs='?', choices=['0', '1'])
     parser.add_argument("--net_type", type=str, default="gat", choices=["gcn", "gat", "gn"])
 
     return parser.parse_args()
 
 def main(drug_id, config, version):
-    _, _, _, X, target, \
-        drug_name, save_dir, model_save_dir = load_gdsc_cancer_data(drug_id, data_dir, exp_dir)
+    tissue_motif_data, string_ppi, hgnc2ens_map, \
+        X, target, drug_name, save_dir, model_save_dir = load_gdsc_cancer_data(drug_id, data_dir, exp_dir)
 
     print(f"Running for drug {drug_name}({drug_id})...")
-    run_gnn(seeds, save_dir, model_save_dir, version, X, target, **config)
+    run_gnn(seeds, tissue_motif_data, string_ppi, hgnc2ens_map,
+            save_dir, model_save_dir, version, X, target, **config)
 
     print(f"Done for drug {drug_name} ({drug_id})")
 
@@ -341,5 +356,6 @@ if __name__ == "__main__":
               "message_passing_steps": args.message_passing_steps, "skip_connections": skip_connections,
               "layer_norm": layer_norm, "net_type": [net_type]}
 
+    print(f"Running with config: {config}")
     for drug_id in drug_ids:
         main(drug_id, config, version)

@@ -1,18 +1,21 @@
+--extra-index-url https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+--extra-index-url https://download.pytorch.org/whl/cu118
+jax[cuda11_pip]
+torch
+torchvision
 numpy
 pandas
 scipy
 scikit-learn
 matplotlib
-jaxlib
-jax
 optax
 dm-haiku
 jraph
-torch
 tensorflow_probability
 tqdm
 optuna
 pyyaml
 category_encoders
-netZooPy @ git+https://github.com/Habush/netZooPy.git
-horsehoe_bnn @ git+https://github.com/Habush/horsehoe_bnn.git
+ipdb
+cupy
+tensorboard

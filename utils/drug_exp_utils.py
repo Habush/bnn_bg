@@ -1,21 +1,15 @@
-import os.path
-import pickle
-
-import jax
-import numpy as np
-import pandas as pd
-import torch
-
-from netZooPy.panda import Panda
-from hpo_util import *
-from data_utils import NumpyLoader, NumpyData, preprocess_data
-from nn_util import *
-from sklearn.preprocessing import QuantileTransformer, StandardScaler
-from tqdm import tqdm
-import optuna
-import pathlib
-from scipy import sparse
 import os
+import os.path
+import pathlib
+
+import optuna
+from netZooPy.panda import Panda
+from scipy import sparse
+from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
+from utils.data_utils import NumpyLoader, NumpyData, preprocess_data
+from utils.hpo_util import *
+from utils.nn_util import *
 
 
 def get_result_df(seeds, save_dir, version, zero_out=False, include_gnn=False,
@@ -144,22 +138,19 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_train, X_val, X_test
     data_loader = NumpyLoader(NumpyData(X_train_outer, y_train_outer), batch_size=batch_size, shuffle=True,
                               drop_last=True)
 
-    bnn_model, train_states = train_bnn_model(seed, data_loader, epochs,
+    bnn_model, states = train_bnn_model(seed, data_loader, epochs,
                                                                          num_cycles,
                                                                          beta, M, lr_0, disc_lr_0, hidden_sizes,temp,
                                                                          sigma_1, sigma_2, eta, mu, J, act_fn,
                                                                          show_pgbar=False,
                                                                          prior_dist=prior_dist)
 
+    rmse, r2 = score_bg_bnn_model(bnn_model, X_test, y_test, states)
+
     bnn_states, bnn_disc_states = [], []
-    for state in train_states:
+    for state in states:
         bnn_states.append(state.params)
         bnn_disc_states.append(state.gamma)
-
-    rmse, r2 = score_bg_bnn_model(bnn_model, X_test, y_test, bnn_states,
-                                                          bnn_disc_states)
-
-
 
     return bnn_states, bnn_disc_states, rmse, r2
 
@@ -273,8 +264,6 @@ def cross_val_horseshoe_bnn(seeds, X, y, version, save_dir, model_save_dir,
                             saved_config=False, n_trial=7, **configs):
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
-    gene_list = X.columns.to_list()
-    use_laplacian = configs["use_laplacian"]
     horseshoe_config_file = configs["horseshoe_config_file"]
     drug_name = configs["drug_name"]
     num_hidden = configs["num_hidden"]

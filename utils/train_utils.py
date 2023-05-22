@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from core.bnn_model import *
 from core.optim import *
-from data_utils import *
+from utils.data_utils import *
 
 
 def get_act_fn(name):
@@ -106,10 +106,11 @@ def train_bnn_model(seed, train_loader, epochs, num_cycles, beta, m, lr_0, disc_
 
     return model, states
 
-def apply_bnn_model(model, X, y, params, gammas, classifier=False):
+def apply_bnn_model(model, X, y, states, classifier=False):
 
-    y_preds = np.zeros((len(params), len(y)))
-    for i, (param, gamma) in enumerate(zip(params, gammas)):
+    y_preds = np.zeros((len(states), len(y)))
+    for i, state in enumerate(states):
+        param, gamma = state.params, state.gamma
         preds = model.apply(param, gamma, X).ravel()
         if classifier:
             y_preds[i] = jax.nn.sigmoid(preds)
@@ -118,9 +119,9 @@ def apply_bnn_model(model, X, y, params, gammas, classifier=False):
 
     return y_preds
 
-def score_bg_bnn_model(model, X, y, params, gammas, classifier=False,
+def score_bg_bnn_model(model, X, y, states, classifier=False,
                        y_mean=0.0, y_std=1.0):
-    y_preds = apply_bnn_model(model, X, y, params, gammas, classifier)
+    y_preds = apply_bnn_model(model, X, y, states, classifier)
     if classifier:
         y_preds = np.mean(y_preds, axis=0)
         score = roc_auc_score(y, y_preds)
@@ -137,14 +138,14 @@ def score_bg_bnn_model(model, X, y, params, gammas, classifier=False,
         return score, r2
 
 
-def score_bg_bnn_model_batched(model, X, y, params, gammas, batch_size,
+def score_bg_bnn_model_batched(model, X, y, states, batch_size,
                                classifier=False, y_mean=0.0, y_std=1.0):
 
     data_loader = NumpyLoader(NumpyData(X, y), batch_size=batch_size, shuffle=False)
 
     y_preds = []
     for batch_x, batch_y in data_loader:
-        batch_preds = apply_bnn_model(model, batch_x, batch_y, params, gammas, classifier)
+        batch_preds = apply_bnn_model(model, batch_x, batch_y, states, classifier)
         y_preds.append(batch_preds)
 
     y_preds = np.concatenate(y_preds, axis=1)
@@ -226,10 +227,10 @@ def eval_sklearn_model(model, X, y, y_mean=0, y_std=1, classifier=False):
         r2 = r2_score(y, y_preds)
         return rmse, r2
 
-def zero_out_score(model, X, y, states, disc_states, m, lst):
+def zero_out_score(model, X, y, states, m, lst):
     feat_idxs = lst[:m]
     mask = np.zeros(X.shape[1])
     mask[feat_idxs] = 1.0
     X_mask = X @ np.diag(mask)
-    rmse, _ = score_bg_bnn_model(model, X_mask, y, states, disc_states, is_training)
+    rmse, _ = score_bg_bnn_model(model, X_mask, y, states)
     return rmse

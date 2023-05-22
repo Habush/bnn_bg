@@ -1,6 +1,6 @@
 import tensorflow_probability.substrates.jax as tfp
 tfd = tfp.distributions
-from optim import *
+from core.optim import *
 from typing import NamedTuple
 from jax.random import PRNGKey
 
@@ -112,7 +112,7 @@ class BayesNN:
 
     def init(self, rng: PRNGKey, x: jnp.ndarray) -> TrainingState:
         gamma = tfd.Bernoulli(0.5*jnp.ones(x.shape[-1])).sample(seed=rng)*1.
-        params = self._forward.init(rng, x, gamma, True)
+        params = self._forward.init(rng, x, gamma)
         opt_state = self.optimiser.init(params)
         disc_opt_state = self.disc_optimiser.init(gamma)
         return TrainingState(params, gamma, opt_state, disc_opt_state)

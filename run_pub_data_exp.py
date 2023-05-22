@@ -27,18 +27,10 @@ def parse_args():
                         choices=["laplace", "normal", "student_t"]
                         , help="Prior distribution for the weights. Options: laplace, normal, student_t")
     parser.add_argument("--act_fn", default="swish", const="swish", nargs="?",
-                        choices=["swish", "relu", "tanh", "sigmoid"],
+                        choices=["swish", "relu"],
                         help="Activation function for the hidden layers. Options: swish, relu, tanh, sigmoid")
-    parser.add_argument("--dropout_version", default='2', const='2', nargs='?', choices=['1', '2'],
-                        help="1: Feature dropout and spike-slab prior on the first layer, 2: spike-slab prior on "
-                             "the first layer")
     parser.add_argument("--timeout", type=int, default=180, help="Timeout for hyperparameter optimization")
-    parser.add_argument("--n_trials", type=int, default=50, help="Number of trials for hyperparameter optimization")
-    parser.add_argument("--use_laplacian", default='0', const='0', nargs='?', choices=['0', '1'],
-                        help="Whether to use laplacian regularization or not")
-    parser.add_argument("--num_folds", type=int, default=20, help="Number of folds for cross validation")
-    parser.add_argument("--scale_output", default='1', const='1', nargs='?', choices=['0', '1'],
-                        help="Whether to scale the output or not")
+    parser.add_argument("--n_trials", type=int, default=30, help="Number of trials for hyperparameter optimization")
     parser.add_argument("--saved_config", default='0', const='0', nargs='?', choices=['0', '1'],
                         help="Whether to scale the output or not")
 
@@ -50,7 +42,6 @@ def parse_args():
 def run_benchmark_exps(data_name, *, data_dir, seeds, hbnn_config_file, model_configs,
                        epochs, exp_dir, version, n_trials, use_horseshoe_bnn=False):
 
-    years_test_size = 51630
     print(f"Running experiments on {data_name} dataset")
     save_dir = f"{exp_dir}/{data_name}/"
     pathlib.Path(save_dir).mkdir(parents=True, exist_ok=True)
@@ -67,11 +58,7 @@ def run_benchmark_exps(data_name, *, data_dir, seeds, hbnn_config_file, model_co
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=seed, stratify=y,
                                                                 shuffle=True)
         else:
-            if data_name == "year":
-                X_train, X_test, y_train, y_test = X[:-years_test_size], X[-years_test_size:], y[:-years_test_size], y[
-                                                                                                                     -years_test_size:]
-            else:
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=seed,
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=seed,
                                                                     shuffle=True)
 
         if cat_cols is not None:
@@ -120,14 +107,14 @@ def run_benchmark_exps(data_name, *, data_dir, seeds, hbnn_config_file, model_co
                                                                           y_train, y_test,
                                                                           epochs, batch_size, J_zeros, model_configs["bnn"],
                                                                           n_trials,
-                                                                          classification, dropout_version=2, bg=False)
+                                                                          classification, bg=False)
 
             bnn_bg_states, bnn_bg_disc_states, bnn_bg_rmse, bnn_bg_r2 = run_bnn_model(seed, save_dir, version, X_train,
                                                                                       X_test,
                                                                                       y_train, y_test,
                                                                                       epochs, batch_size, J,
                                                                                       model_configs["bnn + bg"], n_trials,
-                                                                                      classification, dropout_version=2,
+                                                                                      classification,
                                                                                       bg=True)
 
             params_bnn = tree_utils.tree_stack(bnn_states)
@@ -181,7 +168,6 @@ if __name__ == "__main__":
         for line in fp:
             seeds.append(int(line.strip()))
 
-    scale_output = int(args.scale_output) == 1
     use_horseshoe_bnn = int(args.horseshoe_bnn) == 1
     saved_config = int(args.saved_config) == 1
 
@@ -195,7 +181,7 @@ if __name__ == "__main__":
     data_dir = args.data_dir
     hbnn_config_file = f"{data_dir}/horseshoeBNN_config.yaml"
 
-    exp_fn = functools.partial(run_benchmark_exps, data_dir=data_dir, seeds=seeds[:args.num_folds],
+    exp_fn = functools.partial(run_benchmark_exps, data_dir=data_dir, seeds=seeds,
                                hbnn_config_file=hbnn_config_file,
                                model_configs=model_configs, epochs=args.num_epochs, exp_dir=exp_dir,
                                version=args.version,

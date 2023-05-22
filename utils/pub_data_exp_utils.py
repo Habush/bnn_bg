@@ -1,9 +1,9 @@
 import pickle
 
-from hpo_util import *
-from train_utils import *
+from utils.hpo_util import *
+from utils.train_utils import *
 import optuna
-from drug_exp_utils import get_result_df
+from utils.drug_exp_utils import get_result_df
 
 def get_benchmark_res_df(seeds, save_dir, version):
     res_dfs = []
@@ -124,7 +124,7 @@ def load_data(data_name, data_dir):
 
 def run_bnn_model(seed, save_dir, version, X_train_outer, X_test, y_train_outer, y_test,
                   epochs, batch_size, J, hyperparam_config, n_trials, classification=False,
-                  dropout_version=2, bg=True, show_pgbar=False):
+                  bg=True, show_pgbar=False):
     torch.manual_seed(seed)
     hidden_size = [hyperparam_config["n_hidden"]] * hyperparam_config["num_layers"]
     act_fn = hyperparam_config["act_fn"]
@@ -139,7 +139,7 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_test, y_train_outer,
     study.optimize(lambda trial: objective_benchmark(trial, seed, X_train, X_val, y_train, y_val, J, epochs,
                                                      batch_size, 0.25, hidden_size, act_fn, bg=bg,
                                                      classifier=classification,
-                                                     prior_dist=prior_dist, dropout_version=dropout_version),
+                                                     prior_dist=prior_dist),
                    n_trials=n_trials)
 
     bnn_config = study.best_params
@@ -179,18 +179,18 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_test, y_train_outer,
                                                                 J, act_fn, show_pgbar=show_pgbar, prior_dist=prior_dist,
                                                                 classifier=classification)
 
+    if len(y_test) > 10000:
+        rmse, r2 = score_bg_bnn_model_batched(bnn_model, X_test, y_test,
+                                              states, 2000,
+                                              classifier=classification)
+    else:
+        rmse, r2 = score_bg_bnn_model(bnn_model, X_test, y_test,
+                                      states, classifier=classification)
+
     bnn_states, bnn_disc_states = [],[]
     for state in states:
         bnn_states.append(state.params)
         bnn_disc_states.append(state.gamma)
-
-    if len(y_test) > 10000:
-        rmse, r2 = score_bg_bnn_model_batched(bnn_model, X_test, y_test,
-                                              bnn_states, bnn_disc_states, 2000,
-                                              classifier=classification)
-    else:
-        rmse, r2 = score_bg_bnn_model(bnn_model, X_test, y_test,
-                                      bnn_states, bnn_disc_states, classifier=classification)
 
     return bnn_states, bnn_disc_states, rmse, r2
 

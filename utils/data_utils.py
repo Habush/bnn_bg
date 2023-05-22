@@ -148,7 +148,6 @@ def load_gdsc_cancer_data(drug_id, data_dir, exp_dir):
     pathlib.Path(f"{save_dir}/results").mkdir(parents=True, exist_ok=True)
     pathlib.Path(f"{save_dir}/configs").mkdir(parents=True, exist_ok=True)
     pathlib.Path(f"{save_dir}/checkpoints").mkdir(parents=True, exist_ok=True)
-    pathlib.Path(f"{save_dir}/dropout").mkdir(parents=True, exist_ok=True)
     pathlib.Path(f"{save_dir}/pandas").mkdir(parents=True, exist_ok=True)
     pathlib.Path(f"{save_dir}/optuna").mkdir(parents=True, exist_ok=True)
 

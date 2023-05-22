@@ -1,4 +1,4 @@
-from train_utils import *
+from utils.train_utils import *
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 
 def objective_bg_bnn(trial, seed, x_train, x_val, y_train, y_val,
@@ -18,18 +18,18 @@ def objective_bg_bnn(trial, seed, x_train, x_val, y_train, y_val,
     data_loader = NumpyLoader(NumpyData(x_train, y_train), batch_size=batch_size, shuffle=True,
                               drop_last=True)
 
-    model, states, disc_states = train_bnn_model(seed, data_loader, epochs, num_cycles, beta, m, lr_0,
+    model, states = train_bnn_model(seed, data_loader, epochs, num_cycles, beta, m, lr_0,
                                                            disc_lr_0, hidden_sizes, temp, sigma_1, sigma_2, eta, mu,
                                                  J, act_fn, show_pgbar=False, prior_dist=prior_dist,classifier=classifier)
 
     if classifier:
         score, _ = score_bg_bnn_model(model, x_val, y_val,
-                                      states, disc_states,
+                                      states,
                                       classifier=classifier)
         return 1 - score
     else:
         rmse, _ = score_bg_bnn_model(model, x_val, y_val,
-                                     states, disc_states,
+                                     states,
                                      classifier=classifier)
 
         return rmse
@@ -37,7 +37,7 @@ def objective_bg_bnn(trial, seed, x_train, x_val, y_train, y_val,
 
 def objective_benchmark(trial, seed, x_train, x_val, y_train, y_val, J, epochs, batch_size, beta, hidden_sizes,
                         act_fn, bg=True, classifier=False, prior_dist="laplace",
-                        dropout_version=2, laplacian=False, gpu_id="/gpu:0", y_mean=0., y_std=1.):
+                        y_mean=0., y_std=1.):
 
     lr_0, disc_lr_0 = 1e-3, 0.5
     num_cycles = 50
@@ -46,10 +46,7 @@ def objective_benchmark(trial, seed, x_train, x_val, y_train, y_val, J, epochs, 
     sigma_1 = 0.01
     sigma_2 = 1.0
     if bg:
-        if laplacian:
-            eta = trial.suggest_float("eta", -1e2, -1.0)
-        else:
-            eta = trial.suggest_float("eta", 1.0, 1e3, log=True)
+        eta = trial.suggest_float("eta", 1.0, 1e3, log=True)
 
     else:
         eta = 1.0
@@ -60,20 +57,19 @@ def objective_benchmark(trial, seed, x_train, x_val, y_train, y_val, J, epochs, 
     data_loader = NumpyLoader(NumpyData(x_train, y_train),
                               batch_size=batch_size, shuffle=True, drop_last=True)
 
-    model, states, disc_states = train_bnn_model(seed, data_loader, epochs, num_cycles, beta, m, lr_0,
+    model, states = train_bnn_model(seed, data_loader, epochs, num_cycles, beta, m, lr_0,
                                                                disc_lr_0, hidden_sizes, temp, sigma_1, sigma_2, eta, mu,
                                                                J, act_fn, show_pgbar=False, prior_dist=prior_dist,
                                                                classifier=classifier)
 
     if len(y_val) > 10000:
         rmse, _ = score_bg_bnn_model_batched(model, x_val, y_val,
-                                              states, disc_states, 2000,
+                                              states, 2000,
                                               y_mean=y_mean, y_std=y_std,
                                               classifier=classifier)
     else:
         rmse, _ = score_bg_bnn_model(model, x_val, y_val,
-                                      states, disc_states,
-                                      y_mean=y_mean, y_std=y_std, classifier=classifier)
+                                      states, y_mean=y_mean, y_std=y_std, classifier=classifier)
     return rmse
 def objective_horseshoe_bnn(trial, seed, config_file, x_train, x_val, y_train, y_val, epochs, num_hidden,
                             data_name,classifier=False):
