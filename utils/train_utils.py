@@ -119,7 +119,7 @@ def apply_bnn_model(model, X, y, states, classifier=False):
 
     return y_preds
 
-def score_bg_bnn_model(model, X, y, states, classifier=False,
+def score_bnn_model(model, X, y, states, classifier=False,
                        y_mean=0.0, y_std=1.0):
     y_preds = apply_bnn_model(model, X, y, states, classifier)
     if classifier:
@@ -227,10 +227,14 @@ def eval_sklearn_model(model, X, y, y_mean=0, y_std=1, classifier=False):
         r2 = r2_score(y, y_preds)
         return rmse, r2
 
-def zero_out_score(model, X, y, states, m, lst):
+def zero_out_score(model, X, y, params, gammas, m, lst):
+    params, gammas = tree_utils.tree_unstack(params), tree_utils.tree_unstack(gammas)
+    states = []
+    for param, gamma in zip(params, gammas):
+        states.append(TrainingState(param, gamma, None, None))
     feat_idxs = lst[:m]
     mask = np.zeros(X.shape[1])
     mask[feat_idxs] = 1.0
     X_mask = X @ np.diag(mask)
-    rmse, _ = score_bg_bnn_model(model, X_mask, y, states)
+    rmse, _ = score_bnn_model(model, X_mask, y, states)
     return rmse

@@ -18,7 +18,7 @@ def parse_args():
                         default="./data/seeds.txt")
     parser.add_argument("--data_names", type=str, default="bikeshare,wine,support2,churn",
                         help="Comma separated list of dataset names")
-    parser.add_argument("--version", type=str, default="1a",
+    parser.add_argument("--version", type=str, default="1",
                         help="Version of the current experiment - useful for tracking experiments")
     parser.add_argument("--num_epochs", type=int, default=1000, help="Number of epochs for training")
     parser.add_argument("--num_hidden", type=int, default=64, help="Number of hidden units in each layer")

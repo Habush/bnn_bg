@@ -9,17 +9,6 @@ from optax import GradientTransformation
 
 from utils import tree_utils
 
-
-class TrainingState(NamedTuple):
-    params: hk.Params
-    avg_params: hk.Params
-    opt_state: optax.OptState
-
-class ResnetState(NamedTuple):
-    params: hk.Params
-    opt_state: hk.Params
-    net_state: hk.State
-
 Momentum = Any  # An arbitrary pytree of `jnp.ndarrays`
 GradMomentEstimates = optax.Params  # Same type as parameters
 PreconditionerState = NamedTuple  # State of a preconditioner
