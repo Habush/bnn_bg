@@ -44,8 +44,8 @@ pip install .
 ### 1. Running GDSC Drug experiments
 
 The GDSC drug experiments are run using the `run_drug_exps.py` scripts. To reproduce the results in the paper, you 
-should use the random seeds in the `seeds.txt` file. The data for the experiments can be downloaded from <insert 
-link here>. The data should be placed in the `data/gdsc` (the default path) folder.
+should use the random seeds in the `seeds.txt` file. The data for the experiments can be downloaded from [here](https://drive.google.com/file/d/1N9MGhkPspWA-QD8R4Tc0RZxX9VHWDyf3/view?usp=sharing) (in zip format). The 
+data should be placed in the `data/gdsc` (the default path) folder.
 
 The following command runs the experiments for the GDSC drugs for the BNN + BG, BNN w/o BG and Random 
 Forest models. The results are saved in the `data/gdsc/exps` folder.
@@ -79,7 +79,8 @@ these experiments.
 ### 4. Run the Public datasets experiments
 
 The public datasets experiments are run using the `run_public_exps.py` script. The datasets can be downloaded from 
-<insert link here>. The data should be placed in the `data/pub_data` (the default path) folder. The results in the 
+[here](https://drive.google.com/file/d/1zGYH-JVy-9Tzrj0fycI7ikOBKk7SySCO/view?usp=sharing) (in zip format). The data 
+should be placed in the `data/pub_data` (the default path) folder. The results in the 
 paper are obtained using 10-fold cross-validation. To reproduce the results, you should use the first 10 seeds in 
 the `seeds.txt` file.
 
