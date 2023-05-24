@@ -12,38 +12,32 @@ from utils.hpo_util import *
 from utils.nn_util import *
 
 
-def get_result_df(seeds, save_dir, version, zero_out=False, include_gnn=False,
-                  gnn_version=None, hbnn_version=None):
+def get_result_df(seeds, save_dir, zero_out=False):
 
 
     res_dfs = []
-    if include_gnn:
-        assert gnn_version is not None, "You need to specify the model version to load gnn results"
     for seed in seeds:
         if zero_out:
-            df = pd.read_csv(f"{save_dir}/results/feat_zero_out_comp_bnn_bg_rf_s_{seed}_ig_v{version}.csv")
+            df = pd.read_csv(f"{save_dir}/results/feat_zero_out_comp_bnn_bg_rf_s_{seed}.csv")
         else:
-            df = pd.read_csv(f"{save_dir}/results/bnn_rf_bg_s_{seed}_v{version}.csv")
-            if hbnn_version is not None:
-                hbnn_df = pd.read_csv(f"{save_dir}/results/horseshoe_bnn_s_{seed}_v{hbnn_version}.csv")
-                df = pd.concat([df, hbnn_df], axis=0, ignore_index=True)
-        res_dfs.append(df)
-        if include_gnn:
-            gnn_df = pd.read_csv(f"{save_dir}/results/bg_gnn_s_{seed}_v{gnn_version}.csv")
+            df = pd.read_csv(f"{save_dir}/results/bnn_rf_bg_s_{seed}.csv")
+            hbnn_df = pd.read_csv(f"{save_dir}/results/horseshoe_bnn_s_{seed}.csv")
+            df = pd.concat([df, hbnn_df], axis=0, ignore_index=True)
+
+            gnn_df = pd.read_csv(f"{save_dir}/results/bg_gnn_s_{seed}.csv")
+            res_dfs.append(df)
             res_dfs.append(gnn_df)
 
     bnn_rf_df = pd.concat(res_dfs, ignore_index=True, axis=0)
     return bnn_rf_df
 
 
-def get_summary_results(seeds, drug_names, exp_dir, version, num_models=3,
-                        include_gnn=False, gnn_version=None, min_highlight=False
-                        , hbnn_version=None):
+def get_summary_results(seeds, drug_names, exp_dir, num_models=3,
+                       min_highlight=False):
     drug_res_all = []
     for drug in drug_names:
         save_dir = f"{exp_dir}/{drug}"
-        drug_res_df = get_result_df(seeds, save_dir, version, include_gnn=include_gnn,
-                                    gnn_version=gnn_version, hbnn_version=hbnn_version)
+        drug_res_df = get_result_df(seeds, save_dir)
         drug_name_col = [drug for _ in range(num_models * len(seeds))]
         drug_res_df.insert(0, column="drug", value=drug_name_col)
         drug_res_all.append(drug_res_df)
@@ -63,11 +57,11 @@ def get_summary_results(seeds, drug_names, exp_dir, version, num_models=3,
     return perf_table
 
 
-def get_feature_ranking_summary(seeds, drug_names, exp_dir, version, num_models=3, k=50):
+def get_feature_ranking_summary(seeds, drug_names, exp_dir, num_models=3, k=50):
     drug_res_all = []
     for drug in drug_names:
         save_dir = f"{exp_dir}/{drug}"
-        drug_res_df = get_result_df(seeds, save_dir, version, zero_out=True)
+        drug_res_df = get_result_df(seeds, save_dir, zero_out=True)
         drug_res_df = drug_res_df[drug_res_df["num_feats"] == k]
         drug_name_col = [drug for _ in range(num_models * len(seeds))]
         drug_res_df.insert(0, column="drug", value=drug_name_col)
@@ -89,10 +83,9 @@ def get_feature_ranking_summary(seeds, drug_names, exp_dir, version, num_models=
     # perf_table["summary"].style.apply(highlight_min, props='font-weight:bold', axis=1)
     return perf_table
 
-def run_bnn_model(seed, save_dir, version, X_train_outer, X_train, X_val, X_test,
+def run_bnn_model(seed, save_dir, X_train_outer, X_train, X_val, X_test,
                   y_train_outer, y_train, y_val, y_test, J,
-                  hyperparam_config, timeout, saved_config=False,
-                  dropout_version=2, bg=True):
+                  hyperparam_config, timeout, saved_config=False, bg=True):
 
     torch.manual_seed(seed)
     hidden_size = hyperparam_config["num_hidden"]
@@ -102,11 +95,11 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_train, X_val, X_test
     epochs = hyperparam_config["epochs"]
 
     if bg:
-        config_path = f"{save_dir}/configs/bg_bnn_config_s_{seed}_optuna_v{version}.pkl"
-        study_path = f"{save_dir}/optuna/study_bg_bnn_s_{seed}_v{version}.pkl"
+        config_path = f"{save_dir}/configs/bg_bnn_config_s_{seed}_optuna.pkl"
+        study_path = f"{save_dir}/optuna/study_bg_bnn_s_{seed}.pkl"
     else:
-        config_path = f"{save_dir}/configs/bnn_config_s_{seed}_optuna_v{version}.pkl"
-        study_path = f"{save_dir}/optuna/study_bnn_s_{seed}_optuna_v{version}.pkl"
+        config_path = f"{save_dir}/configs/bnn_config_s_{seed}_optuna.pkl"
+        study_path = f"{save_dir}/optuna/study_bnn_s_{seed}_optuna.pkl"
 
     if saved_config and os.path.exists(config_path):
         bnn_config = pickle.load(open(config_path, "rb"))
@@ -145,7 +138,7 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_train, X_val, X_test
                                                                          show_pgbar=False,
                                                                          prior_dist=prior_dist)
 
-    rmse, r2 = score_bg_bnn_model(bnn_model, X_test, y_test, states)
+    rmse, r2 = score_bnn_model(bnn_model, X_test, y_test, states)
 
     bnn_states, bnn_disc_states = [], []
     for state in states:
@@ -155,7 +148,7 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_train, X_val, X_test
     return bnn_states, bnn_disc_states, rmse, r2
 
 def cross_val_runs(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
-                      version, save_dir, model_save_dir, saved_config=False, timeout=180,
+                      save_dir, model_save_dir, saved_config=False, timeout=180,
                       n_trials=30, **configs):
 
 
@@ -187,37 +180,36 @@ def cross_val_runs(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
                                                 X_val[:,col_idxs], X_test[:,col_idxs]
 
         #BNN w/ BG
-        bnn_bg_states, bnn_bg_disc_states, bnn_bg_rmse, bnn_bg_r2 = run_bnn_model(seed, save_dir,version,
+        bnn_bg_states, bnn_bg_disc_states, bnn_bg_rmse, bnn_bg_r2 = run_bnn_model(seed, save_dir,
                                                                                   X_train_outer, X_train, X_val,
                                                                                   X_test, y_train_outer, y_train,
                                                                                   y_val, y_test, J, configs, timeout,
                                                                                   saved_config, bg=True)
         params_bg_bnn = tree_utils.tree_stack(bnn_bg_states)
         gammas_bg_bnn = tree_utils.tree_stack((bnn_bg_disc_states))
-        save_model(model_save_dir, seed, version, params_bg_bnn, gammas_bg_bnn, True)
+        save_model(model_save_dir, seed, params_bg_bnn, gammas_bg_bnn, True)
 
         #BNN w/o BG
-        bnn_states, bnn_disc_states, bnn_rmse, bnn_r2 = run_bnn_model(seed, save_dir, version,
+        bnn_states, bnn_disc_states, bnn_rmse, bnn_r2 = run_bnn_model(seed, save_dir,
                                                                           X_train_outer, X_train, X_val,
                                                                           X_test, y_train_outer, y_train,
                                                                           y_val, y_test, J_zeros, configs, n_trials,
                                                                           saved_config, bg=False)
         params_bnn = tree_utils.tree_stack(bnn_states)
         gammas_bnn = tree_utils.tree_stack(bnn_disc_states)
-        save_model(model_save_dir, seed, version, params_bnn, gammas_bnn, False)
+        save_model(model_save_dir, seed, params_bnn, gammas_bnn, False)
 
         ## RF
-        rf_model_path = f"{save_dir}/checkpoints/rf_model_s_{seed}_v{version}.pkl"
-        rf_config_path = f"{save_dir}/configs/rf_config_s_{seed}_optuna_v{version}.pkl"
+        rf_model_path = f"{save_dir}/checkpoints/rf_model_s_{seed}.pkl"
+        rf_config_path = f"{save_dir}/configs/rf_config_s_{seed}_optuna.pkl"
         if saved_config and os.path.exists(rf_model_path):  # standard scaler
             rf_model = pickle.load(open(rf_model_path, "rb"))
         else:
-            # rf_model = train_rf_model(seed, X_train_outer, y_train_outer, train_indices, val_indices)
             sampler = optuna.samplers.TPESampler(seed=seed)
             study = optuna.create_study(sampler=sampler)
             study.optimize(lambda trial: objective_rf(trial, seed, X_train, X_val, y_train, y_val), timeout=timeout)
 
-            with open(f"{save_dir}/optuna/study_rf_s_{seed}_v{version}.csv", "wb") as fp:
+            with open(f"{save_dir}/optuna/study_rf_s_{seed}.csv", "wb") as fp:
                 pickle.dump(study, fp)
                 fp.flush()
 
@@ -252,7 +244,7 @@ def cross_val_runs(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
         print(f"BNN w/o scores - rmse: {bnn_rmse}, r2: {bnn_r2}")
         print(f"BNN + BG scores - rmse: {bnn_bg_rmse}, r2: {bnn_bg_r2}")
 
-        with open(f"{save_dir}/results/bnn_rf_bg_s_{seed}_v{version}.csv", "w") as fp:
+        with open(f"{save_dir}/results/bnn_rf_bg_s_{seed}.csv", "w") as fp:
             pd.DataFrame(bnn_rf_bg_dict).to_csv(fp, index=False)
             fp.flush()
 
@@ -260,7 +252,7 @@ def cross_val_runs(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
 
 
 
-def cross_val_horseshoe_bnn(seeds, X, y, version, save_dir, model_save_dir,
+def cross_val_horseshoe_bnn(seeds, X, y, save_dir, model_save_dir,
                             saved_config=False, n_trial=7, **configs):
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -285,7 +277,7 @@ def cross_val_horseshoe_bnn(seeds, X, y, version, save_dir, model_save_dir,
 
         ## Horsehoe BNN
 
-        horseshoe_config_path = f"{save_dir}/configs/horseshoe_bnn_config_s_{seed}_optuna_v{version}.pkl"
+        horseshoe_config_path = f"{save_dir}/configs/horseshoe_bnn_config_s_{seed}_optuna.pkl"
         if os.path.exists(horseshoe_config_path) and saved_config:
             with open(horseshoe_config_path, "rb") as fp:
                 horseshoe_config = pickle.load(fp)
@@ -298,7 +290,7 @@ def cross_val_horseshoe_bnn(seeds, X, y, version, save_dir, model_save_dir,
 
             horseshoe_config = study.best_params
 
-            with open(f"{save_dir}/optuna/study_horseshoe_bnn_s_{seed}_v{version}.pkl", "wb") as fp:
+            with open(f"{save_dir}/optuna/study_horseshoe_bnn_s_{seed}.pkl", "wb") as fp:
                 pickle.dump(study, fp)
                 fp.flush()
 
@@ -311,7 +303,7 @@ def cross_val_horseshoe_bnn(seeds, X, y, version, save_dir, model_save_dir,
                                                                                 batch_size, config,
                                                                                 drug_name, False)
 
-        with open(f"{save_dir}/configs/horseshoe_bnn_config_s_{seed}_optuna_v{version}.pkl", "wb") as fp:
+        with open(f"{save_dir}/configs/horseshoe_bnn_config_s_{seed}_optuna.pkl", "wb") as fp:
                 pickle.dump(horseshoe_config, fp)
                 fp.flush()
 
@@ -320,17 +312,17 @@ def cross_val_horseshoe_bnn(seeds, X, y, version, save_dir, model_save_dir,
         horseshoe_res_df_dict["test_rmse"].append(horseshoe_rmse)
         horseshoe_res_df_dict["test_r2_score"].append(horseshoe_r2)
 
-        torch.save(horseshoe_model.state_dict(), f"{model_save_dir}/horseshoe_bnn_s_{seed}_v{version}.pt")
+        torch.save(horseshoe_model.state_dict(), f"{model_save_dir}/horseshoe_bnn_s_{seed}.pt")
 
         print(f"Horseshoe BNN scores - rmse: {horseshoe_rmse}, r2: {horseshoe_r2}")
 
-        with open(f"{save_dir}/results/horseshoe_bnn_s_{seed}_v{version}.csv", "w") as fp:
+        with open(f"{save_dir}/results/horseshoe_bnn_s_{seed}.csv", "w") as fp:
             pd.DataFrame(horseshoe_res_df_dict).to_csv(fp, index=False)
             fp.flush()
 
     return print("Done")
 
-def zero_out_ranking(seeds, X, y, version, save_dir, model_save_dir, num_feats, **configs):
+def zero_out_ranking(seeds, X, y, save_dir, model_save_dir, num_feats, **configs):
     epochs = configs["epochs"]
     act_fn = configs["act_fn"]
     prior_dist = configs["prior_dist"]
@@ -359,7 +351,7 @@ def zero_out_ranking(seeds, X, y, version, save_dir, model_save_dir, num_feats, 
         J_zeros = np.zeros_like(J)
         ### BNN + BG
 
-        bnn_bg_config = pickle.load(open(f"{save_dir}/configs/bg_bnn_config_s_{seed}_optuna_v{version}.pkl", "rb"))
+        bnn_bg_config = pickle.load(open(f"{save_dir}/configs/bg_bnn_config_s_{seed}_optuna.pkl", "rb"))
 
         num_cycles = 50
         batch_size = 16 if X_train.shape[0] < 200 else 32
@@ -377,15 +369,15 @@ def zero_out_ranking(seeds, X, y, version, save_dir, model_save_dir, num_feats, 
                                             num_cycles, temp, sigma_1, sigma_2,
                                             hidden_sizes, J, eta, mu, get_act_fn(act_fn), prior_dist)
 
-        params_bg_bnn, gammas_bg_bnn = load_model(model_save_dir, seed, version, True)
+        params_bg_bnn, gammas_bg_bnn = load_model(model_save_dir, seed, True)
 
         w_mean_bg = jnp.mean(params_bg_bnn["dropout"]["w"], axis=0)
         w_norm_bg = jax.device_get(jax.vmap(lambda x: jnp.linalg.norm(x))(w_mean_bg))
         bg_bnn_feat_idx = np.argsort(w_norm_bg)[::-1]
-        np.save(f"{save_dir}/ft_importance/bg_bnn_ft_importance_s_{seed}_v{version}.npy", w_norm_bg)
+        np.save(f"{save_dir}/ft_importance/bg_bnn_ft_importance_s_{seed}.npy", w_norm_bg)
 
         ##### BNN w/o BG
-        bnn_config = pickle.load(open(f"{save_dir}/configs/bnn_config_s_{seed}_optuna_v{version}.pkl", "rb"))
+        bnn_config = pickle.load(open(f"{save_dir}/configs/bnn_config_s_{seed}_optuna.pkl", "rb"))
 
         temp = bnn_config["temp"]
         hidden_sizes = [256]*bnn_config["num_layers"]
@@ -397,18 +389,18 @@ def zero_out_ranking(seeds, X, y, version, save_dir, model_save_dir, num_feats, 
                                          num_cycles, temp, sigma_1, sigma_2,
                                          hidden_sizes, J_zeros, eta, mu, get_act_fn(act_fn), prior_dist)
 
-        params_bnn, gammas_bnn = load_model(model_save_dir, seed, version, False)
+        params_bnn, gammas_bnn = load_model(model_save_dir, seed, False)
 
         w_mean_bnn = jnp.mean(params_bnn["dropout"]["w"], axis=0)
         w_norm_bnn = jax.device_get(jax.vmap(lambda x: jnp.linalg.norm(x))(w_mean_bnn))
         bnn_feat_idx = np.argsort(w_norm_bnn)[::-1]
-        np.save(f"{save_dir}/ft_importance/bnn_ft_importance_s_{seed}_v{version}.npy", w_norm_bnn)
+        np.save(f"{save_dir}/ft_importance/bnn_ft_importance_s_{seed}.npy", w_norm_bnn)
 
-        rf_model_path = f"{save_dir}/checkpoints/rf_model_s_{seed}_v{version}.pkl"
+        rf_model_path = f"{save_dir}/checkpoints/rf_model_s_{seed}.pkl"
 
         rf_model = pickle.load(open(rf_model_path, "rb"))
         rf_feat_idx = np.argsort(rf_model.feature_importances_)[::-1]
-        np.save(f"{save_dir}/ft_importance/rf_ft_importance_s_{seed}_v{version}.npy", rf_model.feature_importances_)
+        np.save(f"{save_dir}/ft_importance/rf_ft_importance_s_{seed}.npy", rf_model.feature_importances_)
 
         for num_feat in num_feats:
             ### BNN + BG
@@ -441,17 +433,17 @@ def zero_out_ranking(seeds, X, y, version, save_dir, model_save_dir, num_feats, 
             bg_bnn_rf_res_dict["test_rmse_score"].append(rmse_bg_bnn)
 
         pd.DataFrame(bg_bnn_rf_res_dict).to_csv(
-            f"{save_dir}/results/feat_zero_out_comp_bnn_bg_rf_s_{seed}_ig_v{version}.csv", index=False)
+            f"{save_dir}/results/feat_zero_out_comp_bnn_bg_rf_s_{seed}.csv", index=False)
 
         i += 1
 
 
-def get_feature_importance(seeds, save_dir, version):
+def get_feature_importance(seeds, save_dir):
     res_dict = {"BNN w/o BG": [], "BNN + BG": [], "RF": []}
     for seed in seeds:
-        res_dict["BNN + BG"].append(np.load(f"{save_dir}/ft_importance/bg_bnn_ft_importance_s_{seed}_v{version}.npy"))
-        res_dict["BNN w/o BG"].append(np.load(f"{save_dir}/ft_importance/bnn_ft_importance_s_{seed}_v{version}.npy"))
-        res_dict["RF"].append(np.load(f"{save_dir}/ft_importance/rf_ft_importance_s_{seed}_v{version}.npy"))
+        res_dict["BNN + BG"].append(np.load(f"{save_dir}/ft_importance/bg_bnn_ft_importance_s_{seed}.npy"))
+        res_dict["BNN w/o BG"].append(np.load(f"{save_dir}/ft_importance/bnn_ft_importance_s_{seed}.npy"))
+        res_dict["RF"].append(np.load(f"{save_dir}/ft_importance/rf_ft_importance_s_{seed}.npy"))
 
     for k in res_dict:
         res_dict[k] = np.mean(res_dict[k], axis=0)
@@ -459,10 +451,10 @@ def get_feature_importance(seeds, save_dir, version):
     return res_dict
 
 
-def save_gene_rank_files(seeds, gene_symbols, save_dir, version, drug_name,
+def save_gene_rank_files(seeds, gene_symbols, save_dir, drug_name,
                          normalize=False):
 
-    ft_importance_dict = get_feature_importance(seeds, save_dir, version)
+    ft_importance_dict = get_feature_importance(seeds, save_dir)
     gene_symbols = np.array(gene_symbols)
     rnk_path = f"{save_dir}/rnk"
     pathlib.Path(rnk_path).mkdir(exist_ok=True, parents=True)
@@ -481,15 +473,15 @@ def save_gene_rank_files(seeds, gene_symbols, save_dir, version, drug_name,
 
         res_df = pd.DataFrame(res_dict)
         if model == "BNN w/o BG":
-            res_df.to_csv(f"{rnk_path}/bnn_ranked_genes_{drug_name}_v{version}.rnk",
+            res_df.to_csv(f"{rnk_path}/bnn_ranked_genes_{drug_name}.rnk",
                           index=False, header=None, sep="\t")
 
         elif model == "BNN + BG":
-            res_df.to_csv(f"{rnk_path}/bnn_bg_ranked_genes_{drug_name}_v{version}.rnk",
+            res_df.to_csv(f"{rnk_path}/bnn_bg_ranked_genes_{drug_name}.rnk",
                           index=False, header=None, sep="\t")
 
         elif model == "RF":
-            res_df.to_csv(f"{rnk_path}/rf_ranked_genes_{drug_name}_v{version}.rnk",
+            res_df.to_csv(f"{rnk_path}/rf_ranked_genes_{drug_name}.rnk",
                           index=False, header=None, sep="\t")
         else:
             raise ValueError(f"Unsupported model {model}")

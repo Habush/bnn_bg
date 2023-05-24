@@ -243,7 +243,7 @@ def evaluate(rng: jax.random.PRNGKey, dataset: List[Dict[str, Any]],
     return rmse
 
 def run_gnn(seeds, tissue_motif_data, string_ppi, hgnc_map,
-            save_dir, model_save_dir, version,
+            save_dir, model_save_dir,
             X, y, **model_configs):
     """Run GNN on the dataset"""
 
@@ -292,11 +292,11 @@ def run_gnn(seeds, tissue_motif_data, string_ppi, hgnc_map,
             res_dict["model"].append(net_type)
             res_dict["test_rmse"].append(test_rmse)
 
-            with open(f"{model_save_dir}/bg_gnn_s_{seed}_v{version}_{net_type.lower()}.pkl", "wb") as fp:
+            with open(f"{model_save_dir}/bg_gnn_s_{seed}_{net_type.lower()}.pkl", "wb") as fp:
                 pickle.dump(params, fp)
                 fp.flush()
 
-        with open(f"{save_dir}/results/bg_gnn_s_{seed}_v{version}.csv", "w") as fp:
+        with open(f"{save_dir}/results/bg_gnn_s_{seed}.csv", "w") as fp:
             res_df = pd.DataFrame(res_dict)
             res_df.to_csv(fp, index=False)
             fp.flush()
@@ -313,8 +313,6 @@ def parse_args():
     parser.add_argument("--exp_dir", type=str, default="./data/gdsc/exps",
                         help="Path to the directory where the experiment data will be saved")
     parser.add_argument("--seeds", type=str, help="Path to the file containing the seeds")
-    parser.add_argument("--version", type=str, default="1", help="Version of the current experiment - useful for "
-                                                                 "tracking experiments")
     parser.add_argument("--num_epochs", type=int, default=1000, help="Number of epochs for training")
     parser.add_argument("--num_hidden", type=int, default=64, help="Number of hidden units in each layer")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of hidden layers")
@@ -325,20 +323,19 @@ def parse_args():
 
     return parser.parse_args()
 
-def main(drug_id, config, version):
+def main(drug_id, config):
     tissue_motif_data, string_ppi, hgnc2ens_map, \
         X, target, drug_name, save_dir, model_save_dir = load_gdsc_cancer_data(drug_id, data_dir, exp_dir)
 
     print(f"Running for drug {drug_name}({drug_id})...")
     run_gnn(seeds, tissue_motif_data, string_ppi, hgnc2ens_map,
-            save_dir, model_save_dir, version, X, target, **config)
+            save_dir, model_save_dir, X, target, **config)
 
     print(f"Done for drug {drug_name} ({drug_id})")
 
 
 if __name__ == "__main__":
     args = parse_args()
-    version = args.version
     seeds = []
     with open(args.seeds, "r") as fp:
         for line in fp:
@@ -358,4 +355,4 @@ if __name__ == "__main__":
 
     print(f"Running with config: {config}")
     for drug_id in drug_ids:
-        main(drug_id, config, version)
+        main(drug_id, config)

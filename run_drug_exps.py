@@ -15,8 +15,6 @@ def parse_args():
     parser.add_argument("--exp_dir", type=str, default="./data/gdsc/exps",
                         help="Path to the directory where the experiment data will be saved")
     parser.add_argument("--seeds", type=str, help="Path to the file containing the seeds")
-    parser.add_argument("--version", type=str, default="1",
-                        help="Version of the current experiment - useful for tracking experiments")
     parser.add_argument("--num_epochs", type=int, default=1000, help="Number of epochs for training")
     parser.add_argument("--num_hidden", type=int, default=256, help="Number of hidden units in each layer")
     parser.add_argument("--num_layers", type=int, default=1, help="Number of hidden layers")
@@ -38,7 +36,7 @@ def parse_args():
 
 
 drug_ids = [1007, 1558, 1199, 1191, 1089,
-           1168, 1013, 1088, 1085, 1080, 1084]    # Docetaxel, Lapatinib , Tamoxifen
+           1168, 1013, 1088, 1080, 1084]    # Docetaxel, Lapatinib , Tamoxifen
                                                 # Bortezomib, Oxaliplatin, Erlotinib, Nilotinib,
                                                 # Irinotecan, "Paclitaxel", "Rapamycin"
 
@@ -66,11 +64,11 @@ def run_single_drug(drug_id, args, seeds):
     print(f"Configs: {hp_configs}")
 
     if use_horseshoe_bnn:
-        cross_val_horseshoe_bnn(seeds, X, target, args.version,
+        cross_val_horseshoe_bnn(seeds, X, target,
                        save_dir, model_save_dir,
                        timeout=args.timeout, n_trials=args.n_trials, **hp_configs)
     else:
-        cross_val_runs(seeds, X, target, tissue_motif_data, string_ppi, hgnc2ens_map, args.version,
+        cross_val_runs(seeds, X, target, tissue_motif_data, string_ppi, hgnc2ens_map,
                               save_dir, model_save_dir,
                               timeout=args.timeout, n_trials=args.n_trials, **hp_configs)
     print(f"Done for drug: {drug_id}/{drug_name}")

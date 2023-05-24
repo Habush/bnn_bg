@@ -145,19 +145,19 @@ def build_network_string(gene_names, string_ppi):
 
 
     return J
-def save_model(save_dir, seed, version, params, gammas, bg, net_state=None):
+def save_model(save_dir, seed, params, gammas, bg, net_state=None):
     if bg:
-        params_path = f"{save_dir}/bg_bnn_params_s_{seed}_v{version}.npy"
-        gammas_path = f"{save_dir}/bg_bnn_gammas_s_{seed}_v{version}.npy"
-        tree_path = f"{save_dir}/bg_bnn_params_s_{seed}_v{version}.pkl"
+        params_path = f"{save_dir}/bg_bnn_params_s_{seed}.npy"
+        gammas_path = f"{save_dir}/bg_bnn_gammas_s_{seed}.npy"
+        tree_path = f"{save_dir}/bg_bnn_params_s_{seed}.pkl"
         if net_state is not None:
-            net_state_path = f"{save_dir}/bg_bnn_net_tree_s_{seed}_v{version}.pkl"
+            net_state_path = f"{save_dir}/bg_bnn_net_tree_s_{seed}.pkl"
     else:
-        params_path = f"{save_dir}/bnn_params_s_{seed}_v{version}.npy"
-        gammas_path = f"{save_dir}/bnn_gammas_s_{seed}_v{version}.npy"
-        tree_path = f"{save_dir}/bnn_params_s_{seed}_v{version}.pkl"
+        params_path = f"{save_dir}/bnn_params_s_{seed}.npy"
+        gammas_path = f"{save_dir}/bnn_gammas_s_{seed}.npy"
+        tree_path = f"{save_dir}/bnn_params_s_{seed}.pkl"
         if net_state is not None:
-            net_state_path = f"{save_dir}/bnn_net_state_s_{seed}_v{version}.pkl"
+            net_state_path = f"{save_dir}/bnn_net_state_s_{seed}.pkl"
 
     np.save(gammas_path, gammas)
     with open(params_path, "wb") as fp:
@@ -172,19 +172,19 @@ def save_model(save_dir, seed, version, params, gammas, bg, net_state=None):
         with open(net_state_path, "wb") as fp:
             pickle.dump(net_state, fp)
 
-def load_model(save_dir, seed, version, bg, net_state=False):
+def load_model(save_dir, seed, bg, net_state=False):
     if bg:
-        params_path = f"{save_dir}/bg_bnn_params_s_{seed}_v{version}.npy"
-        gammas_path = f"{save_dir}/bg_bnn_gammas_s_{seed}_v{version}.npy"
-        tree_path = f"{save_dir}/bg_bnn_params_s_{seed}_v{version}.pkl"
+        params_path = f"{save_dir}/bg_bnn_params_s_{seed}.npy"
+        gammas_path = f"{save_dir}/bg_bnn_gammas_s_{seed}.npy"
+        tree_path = f"{save_dir}/bg_bnn_params_s_{seed}.pkl"
         if net_state:
-            net_state_path = f"{save_dir}/bg_bnn_net_tree_s_{seed}_v{version}.pkl"
+            net_state_path = f"{save_dir}/bg_bnn_net_tree_s_{seed}.pkl"
     else:
-        params_path = f"{save_dir}/bnn_params_s_{seed}_v{version}.npy"
-        gammas_path = f"{save_dir}/bnn_gammas_s_{seed}_v{version}.npy"
-        tree_path = f"{save_dir}/bnn_params_s_{seed}_v{version}.pkl"
+        params_path = f"{save_dir}/bnn_params_s_{seed}.npy"
+        gammas_path = f"{save_dir}/bnn_gammas_s_{seed}.npy"
+        tree_path = f"{save_dir}/bnn_params_s_{seed}.pkl"
         if net_state:
-            net_state_path = f"{save_dir}/bnn_net_state_s_{seed}_v{version}.pkl"
+            net_state_path = f"{save_dir}/bnn_net_state_s_{seed}.pkl"
 
     with open(tree_path, "rb") as fp:
         tree_struct = pickle.load(fp)

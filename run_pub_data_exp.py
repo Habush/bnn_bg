@@ -18,8 +18,6 @@ def parse_args():
                         default="./data/seeds.txt")
     parser.add_argument("--data_names", type=str, default="bikeshare,wine,support2,churn",
                         help="Comma separated list of dataset names")
-    parser.add_argument("--version", type=str, default="1",
-                        help="Version of the current experiment - useful for tracking experiments")
     parser.add_argument("--num_epochs", type=int, default=1000, help="Number of epochs for training")
     parser.add_argument("--num_hidden", type=int, default=64, help="Number of hidden units in each layer")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of hidden layers")
@@ -40,7 +38,7 @@ def parse_args():
     return parser.parse_args()
 
 def run_benchmark_exps(data_name, *, data_dir, seeds, hbnn_config_file, model_configs,
-                       epochs, exp_dir, version, n_trials, use_horseshoe_bnn=False):
+                       epochs, exp_dir, n_trials, use_horseshoe_bnn=False):
 
     print(f"Running experiments on {data_name} dataset")
     save_dir = f"{exp_dir}/{data_name}/"
@@ -90,9 +88,9 @@ def run_benchmark_exps(data_name, *, data_dir, seeds, hbnn_config_file, model_co
             beta_weights = hbnn_model.l1.beta.sample(model_configs["horseshoe_bnn"]["n_samples_testing"])
             w_norm_hs_bnn = torch.mean(beta_weights, dim=0)
             w_mean_hs_bnn = torch.linalg.vector_norm(w_norm_hs_bnn, dim=0).detach().cpu().numpy()
-            np.save(f"{save_dir}/ft_importance/horseshoe_bnn_s_{seed}_v{version}.npy" ,w_mean_hs_bnn)
+            np.save(f"{save_dir}/ft_importance/horseshoe_bnn_s_{seed}.npy" ,w_mean_hs_bnn)
 
-            with open(f"{save_dir}/results/horseshoe_bnn_s_{seed}_v{version}.csv", "w") as fp:
+            with open(f"{save_dir}/results/horseshoe_bnn_s_{seed}.csv", "w") as fp:
                 models_score_df = pd.DataFrame(models_score)
                 models_score_df.to_csv(fp, index=False)
                 fp.flush()
@@ -103,13 +101,13 @@ def run_benchmark_exps(data_name, *, data_dir, seeds, hbnn_config_file, model_co
             J[np.isnan(J)] = 0.0
             J_zeros = np.zeros_like(J)
 
-            bnn_states, bnn_disc_states, bnn_rmse, bnn_r2 = run_bnn_model(seed, save_dir, version, X_train, X_test,
+            bnn_states, bnn_disc_states, bnn_rmse, bnn_r2 = run_bnn_model(seed, save_dir, X_train, X_test,
                                                                           y_train, y_test,
                                                                           epochs, batch_size, J_zeros, model_configs["bnn"],
                                                                           n_trials,
                                                                           classification, bg=False)
 
-            bnn_bg_states, bnn_bg_disc_states, bnn_bg_rmse, bnn_bg_r2 = run_bnn_model(seed, save_dir, version, X_train,
+            bnn_bg_states, bnn_bg_disc_states, bnn_bg_rmse, bnn_bg_r2 = run_bnn_model(seed, save_dir, X_train,
                                                                                       X_test,
                                                                                       y_train, y_test,
                                                                                       epochs, batch_size, J,
@@ -123,7 +121,7 @@ def run_benchmark_exps(data_name, *, data_dir, seeds, hbnn_config_file, model_co
             params_bnn_bg = tree_utils.tree_stack(bnn_bg_states)
             # gammas_bnn_bg = tree_utils.tree_stack(bnn_bg_disc_states)
 
-            rf_model, rf_rmse = run_rf_model(seed, save_dir, version, X_train, X_test, y_train, y_test, n_trials,
+            rf_model, rf_rmse = run_rf_model(seed, save_dir, X_train, X_test, y_train, y_test, n_trials,
                                              classification)
 
             models_score["seed"].append(seed)
@@ -141,16 +139,16 @@ def run_benchmark_exps(data_name, *, data_dir, seeds, hbnn_config_file, model_co
 
             w_norm_bnn = jnp.mean(params_bnn["dropout"]["w"], axis=0)
             w_mean_bnn = jax.device_get(jax.vmap(lambda x: jnp.linalg.norm(x))(w_norm_bnn))
-            np.save(f"{save_dir}/ft_importance/bnn_ft_importance_s_{seed}_v{version}.npy",w_mean_bnn)
+            np.save(f"{save_dir}/ft_importance/bnn_ft_importance_s_{seed}.npy",w_mean_bnn)
 
             w_norm_bnn_bg = jnp.mean(params_bnn_bg["dropout"]["w"], axis=0)
             w_mean_bnn_bg = jax.device_get(jax.vmap(lambda x: jnp.linalg.norm(x))(w_norm_bnn_bg))
-            np.save(f"{save_dir}/ft_importance/bg_bnn_ft_importance_s_{seed}_v{version}.npy" ,w_mean_bnn_bg)
+            np.save(f"{save_dir}/ft_importance/bg_bnn_ft_importance_s_{seed}.npy" ,w_mean_bnn_bg)
 
             w_norm_rf = rf_model.feature_importances_
-            np.save(f"{save_dir}/ft_importance/rf_ft_importance_s_{seed}_v{version}.npy", w_norm_rf)
+            np.save(f"{save_dir}/ft_importance/rf_ft_importance_s_{seed}.npy", w_norm_rf)
 
-            with open(f"{save_dir}/results/bnn_rf_bg_s_{seed}_v{version}.csv", "w") as fp:
+            with open(f"{save_dir}/results/bnn_rf_bg_s_{seed}.csv", "w") as fp:
                 models_score_df = pd.DataFrame(models_score)
                 models_score_df.to_csv(fp, index=False)
                 fp.flush()
@@ -184,7 +182,6 @@ if __name__ == "__main__":
     exp_fn = functools.partial(run_benchmark_exps, data_dir=data_dir, seeds=seeds,
                                hbnn_config_file=hbnn_config_file,
                                model_configs=model_configs, epochs=args.num_epochs, exp_dir=exp_dir,
-                               version=args.version,
                                n_trials=args.n_trials, use_horseshoe_bnn=use_horseshoe_bnn)
 
     data_names = [data_name for data_name in args.data_names.split(",")]

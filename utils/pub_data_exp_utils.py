@@ -14,13 +14,12 @@ def get_benchmark_res_df(seeds, save_dir, version):
     return bnn_rf_df
 
 
-def get_summary_benchmark_results(seeds, data_names, exp_dir, version, models,
-                                  hbnn_version=None):
+def get_summary_benchmark_results(seeds, data_names, exp_dir, models):
     data_res_all = []
     num_models = len(models)
     for data in data_names:
         save_dir = f"{exp_dir}/{data}"
-        data_res_df = get_result_df(seeds, save_dir, version, hbnn_version=hbnn_version)
+        data_res_df = get_result_df(seeds, save_dir)
         data_name_col = [data for _ in range(num_models * len(seeds))]
         data_res_df.insert(0, column="dataset", value=data_name_col)
         data_res_all.append(data_res_df)
@@ -122,7 +121,7 @@ def load_data(data_name, data_dir):
         raise ValueError(f"Data {data_name} not supported")
 
 
-def run_bnn_model(seed, save_dir, version, X_train_outer, X_test, y_train_outer, y_test,
+def run_bnn_model(seed, save_dir, X_train_outer, X_test, y_train_outer, y_test,
                   epochs, batch_size, J, hyperparam_config, n_trials, classification=False,
                   bg=True, show_pgbar=False):
     torch.manual_seed(seed)
@@ -145,11 +144,11 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_test, y_train_outer,
     bnn_config = study.best_params
 
     if bg:
-        config_path = f"{save_dir}/configs/bg_bnn_config_s_{seed}_v{version}.csv"
-        study_path = f"{save_dir}/optuna/study_bg_bnn_s_{seed}_v{version}.csv"
+        config_path = f"{save_dir}/configs/bg_bnn_config_s_{seed}.csv"
+        study_path = f"{save_dir}/optuna/study_bg_bnn_s_{seed}.csv"
     else:
-        config_path = f"{save_dir}/configs/bnn_config_s_{seed}_v{version}.csv"
-        study_path = f"{save_dir}/optuna/study_bnn_s_{seed}_v{version}.csv"
+        config_path = f"{save_dir}/configs/bnn_config_s_{seed}.csv"
+        study_path = f"{save_dir}/optuna/study_bnn_s_{seed}.csv"
 
     with open(config_path, "wb") as fp:
         pickle.dump(bnn_config, fp)
@@ -184,7 +183,7 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_test, y_train_outer,
                                               states, 2000,
                                               classifier=classification)
     else:
-        rmse, r2 = score_bg_bnn_model(bnn_model, X_test, y_test,
+        rmse, r2 = score_bnn_model(bnn_model, X_test, y_test,
                                       states, classifier=classification)
 
     bnn_states, bnn_disc_states = [],[]
@@ -195,7 +194,7 @@ def run_bnn_model(seed, save_dir, version, X_train_outer, X_test, y_train_outer,
     return bnn_states, bnn_disc_states, rmse, r2
 
 
-def run_rf_model(seed, save_dir, version, X_train_outer, X_test, y_train_outer, y_test, n_trials, classification=False):
+def run_rf_model(seed, save_dir, X_train_outer, X_test, y_train_outer, y_test, n_trials, classification=False):
     X_train, X_val, y_train, y_val = train_test_split(X_train_outer, y_train_outer, test_size=0.2, random_state=seed,
                                                       shuffle=True)
 
@@ -205,8 +204,8 @@ def run_rf_model(seed, save_dir, version, X_train_outer, X_test, y_train_outer, 
 
     rf_config = study.best_params
 
-    rf_config_path = f"{save_dir}/configs/rf_config_s_{seed}_v{version}.csv"
-    study_path = f"{save_dir}/optuna/study_rf_s_{seed}_v{version}.csv"
+    rf_config_path = f"{save_dir}/configs/rf_config_s_{seed}.csv"
+    study_path = f"{save_dir}/optuna/study_rf_s_{seed}.csv"
 
     with open(rf_config_path, "wb") as fp:
         pickle.dump(rf_config, fp)
