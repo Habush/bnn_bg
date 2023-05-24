@@ -11,10 +11,10 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description="Run experiments on GDSC drug sensitivity data")
     parser.add_argument("--data_dir", type=str, default="./data/gdsc",
-                        help="Path to the directory where the data is stored. Each seed should be in a separate line")
+                        help="Path to the directory where the data is stored.")
     parser.add_argument("--exp_dir", type=str, default="./data/gdsc/exps",
                         help="Path to the directory where the experiment data will be saved")
-    parser.add_argument("--seeds", type=str, help="Path to the file containing the seeds")
+    parser.add_argument("--seeds", type=str, help="Path to the file containing the seeds.Each seed should be in a separate line")
     parser.add_argument("--num_epochs", type=int, default=1000, help="Number of epochs for training")
     parser.add_argument("--num_hidden", type=int, default=256, help="Number of hidden units in each layer")
     parser.add_argument("--num_layers", type=int, default=1, help="Number of hidden layers")

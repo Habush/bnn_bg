@@ -138,7 +138,7 @@ def score_bnn_model(model, X, y, states, classifier=False,
         return score, r2
 
 
-def score_bg_bnn_model_batched(model, X, y, states, batch_size,
+def score_bnn_model_batched(model, X, y, states, batch_size,
                                classifier=False, y_mean=0.0, y_std=1.0):
 
     data_loader = NumpyLoader(NumpyData(X, y), batch_size=batch_size, shuffle=False)

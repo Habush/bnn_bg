@@ -3,7 +3,9 @@ import argparse
 import matplotlib.pyplot as plt
 from utils.drug_exp_utils import get_feature_ranking_summary
 import numpy as np
+import warnings
 
+warnings.filterwarnings("ignore")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate feature ranking plots for the experiments")

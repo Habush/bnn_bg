@@ -12,7 +12,8 @@ from utils.hpo_util import *
 from utils.nn_util import *
 
 
-def get_result_df(seeds, save_dir, zero_out=False):
+def get_result_df(seeds, save_dir, zero_out=False,
+                  include_horseshoe=True, include_gnn=True):
 
 
     res_dfs = []
@@ -21,12 +22,16 @@ def get_result_df(seeds, save_dir, zero_out=False):
             df = pd.read_csv(f"{save_dir}/results/feat_zero_out_comp_bnn_bg_rf_s_{seed}.csv")
         else:
             df = pd.read_csv(f"{save_dir}/results/bnn_rf_bg_s_{seed}.csv")
-            hbnn_df = pd.read_csv(f"{save_dir}/results/horseshoe_bnn_s_{seed}.csv")
-            df = pd.concat([df, hbnn_df], axis=0, ignore_index=True)
 
-            gnn_df = pd.read_csv(f"{save_dir}/results/bg_gnn_s_{seed}.csv")
-            res_dfs.append(df)
-            res_dfs.append(gnn_df)
+            if include_horseshoe:
+                hbnn_df = pd.read_csv(f"{save_dir}/results/horseshoe_bnn_s_{seed}.csv")
+                df = pd.concat([df, hbnn_df], axis=0, ignore_index=True)
+
+            if include_gnn:
+                gnn_df = pd.read_csv(f"{save_dir}/results/bg_gnn_s_{seed}.csv")
+                df = pd.concat([df, gnn_df], axis=0, ignore_index=True)
+
+        res_dfs.append(df)
 
     bnn_rf_df = pd.concat(res_dfs, ignore_index=True, axis=0)
     return bnn_rf_df
@@ -63,7 +68,7 @@ def get_feature_ranking_summary(seeds, drug_names, exp_dir, k=50):
     num_models = 3
     for drug in drug_names:
         save_dir = f"{exp_dir}/{drug}"
-        drug_res_df = get_result_df(seeds, save_dir, zero_out=True)
+        drug_res_df = get_result_df(seeds, save_dir, zero_out=True, include_horseshoe=False, include_gnn=False)
         drug_res_df = drug_res_df[drug_res_df["num_feats"] == k]
         drug_name_col = [drug for _ in range(num_models * len(seeds))]
         drug_res_df.insert(0, column="drug", value=drug_name_col)

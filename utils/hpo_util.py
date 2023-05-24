@@ -23,12 +23,12 @@ def objective_bg_bnn(trial, seed, x_train, x_val, y_train, y_val,
                                                  J, act_fn, show_pgbar=False, prior_dist=prior_dist,classifier=classifier)
 
     if classifier:
-        score, _ = score_bg_bnn_model(model, x_val, y_val,
+        score, _ = score_bnn_model(model, x_val, y_val,
                                       states,
                                       classifier=classifier)
         return 1 - score
     else:
-        rmse, _ = score_bg_bnn_model(model, x_val, y_val,
+        rmse, _ = score_bnn_model(model, x_val, y_val,
                                      states,
                                      classifier=classifier)
 
@@ -63,12 +63,12 @@ def objective_benchmark(trial, seed, x_train, x_val, y_train, y_val, J, epochs, 
                                                                classifier=classifier)
 
     if len(y_val) > 10000:
-        rmse, _ = score_bg_bnn_model_batched(model, x_val, y_val,
+        rmse, _ = score_bnn_model_batched(model, x_val, y_val,
                                               states, 2000,
                                               y_mean=y_mean, y_std=y_std,
                                               classifier=classifier)
     else:
-        rmse, _ = score_bg_bnn_model(model, x_val, y_val,
+        rmse, _ = score_bnn_model(model, x_val, y_val,
                                       states, y_mean=y_mean, y_std=y_std, classifier=classifier)
     return rmse
 def objective_horseshoe_bnn(trial, seed, config_file, x_train, x_val, y_train, y_val, epochs, num_hidden,

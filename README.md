@@ -97,7 +97,13 @@ head -n 10 seeds.txt > seeds_10.txt
 ./run_public_exps.py --seed seeds_10.txt --horseshoe_bnn 1
 ```
 
-### 5. Generate Summary Tables
+### 5. Run the feature ranking experiments for GDSC drugs
+
+```shell
+./run_drug_ft_rank.py --seed seeds.txt --exp_dir path/to/experiment/results 
+```
+
+### 6. Generate Summary Tables
 
 The summary tables in the paper are generated using the `gen_summary_table.py` script. To generate the tables, 
 run the following command: 
@@ -109,7 +115,9 @@ run the following command:
 
 Use the `--data_type` flag to specify whether to generate the tables for the GDSC or public datasets experiments.
 
-### 6. Generate feature ranking plots
+**Note**: You have to run the experiments first before generating the summary tables.
+
+### 7. Generate feature ranking plots
 
 The feature ranking plots in the paper are generated using the `gen_ft_rank_plots.py` script. To generate the plots, 
 run the following command: 
@@ -117,3 +125,5 @@ run the following command:
 ```shell
 ./gen_ft_rank_plots.py --seed seeds.txt --exp_dir path/to/experiment/results --save_dir path/to/save/plots
 ```
+
+**Note**: You have to run the feature ranking experiments first before generating the plots.

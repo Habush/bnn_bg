@@ -179,7 +179,7 @@ def run_bnn_model(seed, save_dir, X_train_outer, X_test, y_train_outer, y_test,
                                                                 classifier=classification)
 
     if len(y_test) > 10000:
-        rmse, r2 = score_bg_bnn_model_batched(bnn_model, X_test, y_test,
+        rmse, r2 = score_bnn_model_batched(bnn_model, X_test, y_test,
                                               states, 2000,
                                               classifier=classification)
     else:

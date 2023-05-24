@@ -3,7 +3,9 @@ import argparse
 import os
 from utils.drug_exp_utils import get_summary_results as get_drug_summary_results
 from utils.pub_data_exp_utils import get_summary_pub_results
+import warnings
 
+warnings.filterwarnings("ignore")
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate summary table for the experiments")
     parser.add_argument("--exp_dir", type=str, help="Path to the directory where the experiment data is stored")

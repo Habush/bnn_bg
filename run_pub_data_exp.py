@@ -14,7 +14,7 @@ def parse_args():
                         help="Path to the directory containing the data")
     parser.add_argument("--exp_dir", type=str, default="./data/pub_data/exps",
                         help="Path to the directory where the experiment data will be saved")
-    parser.add_argument("--seeds", type=str, help="Path to the file containing the seeds",
+    parser.add_argument("--seeds", type=str, help="Path to the file containing the seeds. Each seed should be in a separate line",
                         default="./data/seeds.txt")
     parser.add_argument("--data_names", type=str, default="bikeshare,wine,support2,churn",
                         help="Comma separated list of dataset names")
