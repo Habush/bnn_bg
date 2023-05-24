@@ -307,7 +307,7 @@ drug_ids = [1007, 1558, 1199, 1191, 1089,
                                                 # Bortezomib, Oxaliplatin, Erlotinib, Nilotinib,
                                                 # Irinotecan, "Paclitaxel", "Rapamycin"
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run experiments on GDSC drug sensitivity data")
+    parser = argparse.ArgumentParser(description="Run Graph Neural Network experiments on GDSC drug sensitivity data")
     parser.add_argument("--data_dir", type=str, default="./data/gdsc",
                         help="Path to the directory where the data is stored. Each seed should be in a separate line")
     parser.add_argument("--exp_dir", type=str, default="./data/gdsc/exps",

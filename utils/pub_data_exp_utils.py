@@ -14,7 +14,7 @@ def get_benchmark_res_df(seeds, save_dir, version):
     return bnn_rf_df
 
 
-def get_summary_benchmark_results(seeds, data_names, exp_dir, models):
+def get_summary_pub_results(seeds, data_names, exp_dir, models):
     data_res_all = []
     num_models = len(models)
     for data in data_names:

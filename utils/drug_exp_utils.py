@@ -32,9 +32,10 @@ def get_result_df(seeds, save_dir, zero_out=False):
     return bnn_rf_df
 
 
-def get_summary_results(seeds, drug_names, exp_dir, num_models=3,
+def get_summary_results(seeds, drug_names, exp_dir,
                        min_highlight=False):
     drug_res_all = []
+    num_models = 5
     for drug in drug_names:
         save_dir = f"{exp_dir}/{drug}"
         drug_res_df = get_result_df(seeds, save_dir)
@@ -57,8 +58,9 @@ def get_summary_results(seeds, drug_names, exp_dir, num_models=3,
     return perf_table
 
 
-def get_feature_ranking_summary(seeds, drug_names, exp_dir, num_models=3, k=50):
+def get_feature_ranking_summary(seeds, drug_names, exp_dir, k=50):
     drug_res_all = []
+    num_models = 3
     for drug in drug_names:
         save_dir = f"{exp_dir}/{drug}"
         drug_res_df = get_result_df(seeds, save_dir, zero_out=True)
@@ -69,18 +71,13 @@ def get_feature_ranking_summary(seeds, drug_names, exp_dir, num_models=3, k=50):
 
     drug_res_all = pd.concat(drug_res_all, axis=0)
     perf_df = drug_res_all.groupby(["drug", "model"]).agg(
-        {"test_rmse_score": ["mean", "std"]}
-    )
-    # perf_df = perf_df.rename(columns={"BNN": "BNN w/o BG"})
+        {"test_rmse_score": ["mean", "std"]})
+
     perf = perf_df["test_rmse_score"]
     perf["summary"] = perf.apply(lambda row: f"{round(row['mean'], 3)}  ± {round(row['std'], 3)}",
                                  axis=1).values
     perf_table = pd.pivot_table(perf[["summary"]], index=["drug"], columns=["model"], aggfunc="last")
 
-    def highlight_min(s, props=''):
-        return np.where(s == np.nanmin(s.values), props, '')
-
-    # perf_table["summary"].style.apply(highlight_min, props='font-weight:bold', axis=1)
     return perf_table
 
 def run_bnn_model(seed, save_dir, X_train_outer, X_train, X_val, X_test,
