@@ -1,240 +1,298 @@
-import datetime
-import yaml
-from horseshoe_bnn.data_handling.dataset import Dataset
-from horseshoe_bnn.models import HorseshoeBNN
-from horseshoe_bnn.parameters import HorseshoeHyperparameters
-from sklearn.metrics import r2_score, accuracy_score, roc_auc_score
-from torch import optim
-from tqdm import tqdm
+# Author Abdulrahman S. Omar <xabush@singularitynet.io>
+import jax
+import optax
+import jax.numpy as jnp
+import numpy as onp
+import functools
+from utils import ensemble_utils, data_utils, metrics, losses, tree_utils
 
-from core.bnn_model import *
-from core.optim import *
-from utils.data_utils import *
+"""numpy implementations of prediction quality metrics.
 
+Partly adapted from
+https://github.com/google-research/google-research/blob/master/bnn_hmc/utils/train_utils.py
+"""
 
-def get_act_fn(name):
-    if name == "relu":
-        return jax.nn.relu
-    if name == "swish":
-        return jax.nn.swish
-    if name == "tanh":
-        return jax.nn.tanh
-    if name == "sigmoid":
-        return jax.nn.sigmoid
-    if name == "celu":
-        return jax.nn.celu
-    if name == "relu6":
-        return jax.nn.relu6
-    if name == "glu":
-        return jax.nn.glu
-    if name == "elu":
-        return jax.nn.elu
-    if name == "leaky_relu":
-        return jax.nn.leaky_relu
-    if name == "log_sigmoid":
-        return jax.nn.log_sigmoid
+def get_task_specific_fns(task, data_info):
+  if task == data_utils.Task.CLASSIFICATION:
+    likelihood_fn = losses.make_xent_log_likelihood
+    ensemble_fn = (
+        ensemble_utils.compute_updated_ensemble_predictions_classification)
+    predict_fn = get_softmax_predictions
+    metrics_fns = {
+        "accuracy": metrics.accuracy,
+        "nll": metrics.nll,
+        "ece": lambda preds, y: metrics.calibration_curve(preds, y)["ece"]
+    }
+    tabulate_metrics = [
+        "train/accuracy", "test/accuracy", "test/nll", "test/ens_accuracy",
+        "test/ens_nll", "test/ens_ece"
+    ]
+  elif task == data_utils.Task.REGRESSION:
+    likelihood_fn = losses.make_gaussian_likelihood
+    ensemble_fn = ensemble_utils.compute_updated_ensemble_predictions_regression
+    predict_fn = get_regression_gaussian_predictions
 
-    return ValueError(f"Unknown activation function: {name}")
+    data_scale = data_info["y_scale"]
+    metrics_fns = {
+        "scaled_nll": metrics.regression_nll,
+        "scaled_mse": metrics.mse,
+        "scaled_rmse": metrics.rmse,
+        "nll": lambda preds, y: metrics.regression_nll(preds, y, data_scale),
+        "mse": lambda preds, y: metrics.mse(preds, y, data_scale),
+        "rmse": lambda preds, y: metrics.rmse(preds, y, data_scale),
+    }
+    tabulate_metrics = [
+        "train/rmse", "train/nll", "test/rmse", "test/nll", "test/ens_rmse",
+        "test/ens_nll"
+    ]
+  return likelihood_fn, predict_fn, ensemble_fn, metrics_fns, tabulate_metrics
 
-def init_bnn_model(seed, train_loader, epochs, lr_0, disc_lr_0, num_cycles, temp, sigma_1, sigma_2,
-                         hidden_sizes, J, eta, mu, act_fn, prior_dist,
-                         init_fn=None, classifier=False):
+def make_likelihood_prior_grad_fns(net_apply, log_likelihood_fn,
+                                   log_prior_fn):
+    """Make functions for training and evaluation.
 
-    torch.manual_seed(seed)
-    num_batches = len(train_loader)
-    data_size = train_loader.dataset.data.shape[0]
-    total_steps = num_batches*epochs
-    step_size_fn = make_cyclical_lr_fn(lr_0, total_steps, num_cycles)
-    disc_step_size_fn = make_cyclical_lr_fn(disc_lr_0, total_steps, num_cycles)
+    Functions return likelihood, prior and gradients separately. These values
+    can be combined differently for full-batch and mini-batch methods.
+    """
 
-    sgd_optim = sgd_gradient_update(step_size_fn, momentum_decay=0.9, preconditioner=get_rmsprop_preconditioner())
-    sgld_optim = sgld_gradient_update(step_size_fn, momentum_decay=0.9, preconditioner=get_rmsprop_preconditioner())
+    def likelihood_prior_and_grads_fn(params, net_state, batch):
+        loss_val_grad = jax.value_and_grad(
+            log_likelihood_fn, has_aux=True, argnums=1)
+        (likelihood,
+         net_state), likelihood_grad = loss_val_grad(net_apply, params, net_state,
+                                                     batch, True)
+        prior, prior_grad = jax.value_and_grad(log_prior_fn)(params)
+        return likelihood, likelihood_grad, prior, prior_grad, net_state
 
+    return likelihood_prior_and_grads_fn
 
-    disc_sgld_optim = disc_sgld_gradient_update(disc_step_size_fn, momentum_decay=0.9, preconditioner=get_rmsprop_preconditioner())
+def make_likelihood_prior_grad_mixed_fns(net_apply, log_likelihood_fn,
+                                   log_prior_fn):
+    """Make functions for training and evaluation.
 
-    if init_fn is None:
-        init_fn = hk.initializers.VarianceScaling()
+    Functions return likelihood, prior and gradients separately. These values
+    can be combined differently for full-batch and mini-batch methods.
+    """
 
-    model = BayesNN(sgd_optim, sgld_optim, disc_sgld_optim,
-          temp, sigma_1, sigma_2, data_size, hidden_sizes,
-          J, eta, mu, act_fn, init_fn, prior_dist, classification=classifier)
+    def likelihood_prior_and_grads_fn(params, gamma, net_state, batch):
+        loss_val_grad = jax.value_and_grad(
+            log_likelihood_fn, has_aux=True, argnums=1)
+        (likelihood,
+         net_state), likelihood_grad = loss_val_grad(net_apply, params, net_state,
+                                                     batch, True)
+        prior, prior_grad = jax.value_and_grad(log_prior_fn)(params, gamma)
+        return likelihood, likelihood_grad, prior, prior_grad, net_state
 
-
-    return model
-
-
-def train_bnn_model(seed, train_loader, epochs, num_cycles, beta, m, lr_0, disc_lr_0,
-                       hidden_sizes, temp, sigma_1, sigma_2, eta, mu, J, act_fn_name,
-                       show_pgbar=True, prior_dist="laplace", classifier=False):
-
-    rng_key = jax.random.PRNGKey(seed)
-    act_fn = get_act_fn(act_fn_name)
-    init_fn = hk.initializers.VarianceScaling()
-
-    model = init_bnn_model(seed, train_loader, epochs, lr_0, disc_lr_0, num_cycles,
-                              temp, sigma_1, sigma_2, hidden_sizes, J, eta, mu,
-                              act_fn, prior_dist, init_fn, classifier)
-
-    num_batches = len(train_loader)
-    M = (epochs*num_batches) // num_cycles
-    train_state = model.init(rng_key, next(iter(train_loader))[0])
-    states = []
-    step = 0
-    key = rng_key
-
-    if show_pgbar:
-        pgbar = tqdm(range(epochs))
-    else:
-        pgbar = range(epochs)
-
-    model.add_noise = True
-    for _ in pgbar:
-        for batch_x, batch_y in train_loader:
-            _, key = jax.random.split(key, 2)
-            rk = (step % M) / M
-            if rk > beta:
-                model.add_noise = True
-            else:
-                model.add_noise = False
-            train_state = model.update(key, train_state, batch_x, batch_y)
-            step += 1
-
-            if (step % M) + 1 > (M - m):
-                states.append(train_state)
+    return likelihood_prior_and_grads_fn
 
 
-    return model, states
+def make_bin_likelihood_prior_grad_fns(log_likelihood_fn,
+                                       log_prior_fn):
+    """Make functions for training and evaluation for binary latent variables."""
 
-def apply_bnn_model(model, X, y, states, classifier=False):
+    def likelihood_prior_and_grads_fn(gamma, params):
+        likelihood, likelihood_grad = jax.value_and_grad(log_likelihood_fn)(gamma, params)
+        prior, prior_grad = jax.value_and_grad(log_prior_fn)(gamma)
 
-    y_preds = np.zeros((len(states), len(y)))
-    for i, state in enumerate(states):
-        param, gamma = state.params, state.gamma
-        preds = model.apply(param, gamma, X).ravel()
-        if classifier:
-            y_preds[i] = jax.nn.sigmoid(preds)
-        else:
-            y_preds[i] = preds
+        return likelihood, likelihood_grad, prior, prior_grad
 
-    return y_preds
+    return likelihood_prior_and_grads_fn
 
-def score_bnn_model(model, X, y, states, classifier=False,
-                       y_mean=0.0, y_std=1.0):
-    y_preds = apply_bnn_model(model, X, y, states, classifier)
-    if classifier:
-        y_preds = np.mean(y_preds, axis=0)
-        score = roc_auc_score(y, y_preds)
-        acc = accuracy_score(y, y_preds > 0.5)
-        return score, acc
-    else:
-        y_preds = y_preds * y_std + y_mean
-        y_preds = np.mean(y_preds, axis=0)
-        score = jnp.sqrt(jnp.mean((y - y_preds)**2))
-        if np.isfinite(y_preds).all():
-            r2 = r2_score(y, y_preds)
-        else:
-            r2 = np.nan
-        return score, r2
+def make_minibatch_log_prob_and_grad(
+        likelihood_prior_and_grads_fn, num_batches):
+    """Make log-prob and grad function for mini-batch methods."""
+    @jax.jit
+    def log_prob_and_grad(dataset, params, net_state):
+        likelihood, likelihood_grad, prior, prior_grad, net_state = (
+            likelihood_prior_and_grads_fn(params, net_state, dataset))
 
+        log_prob = likelihood * num_batches + prior
+        grad = jax.tree_map(lambda gl, gp: gl * num_batches + gp,
+                            likelihood_grad, prior_grad)
+        return log_prob, grad, net_state
 
-def score_bnn_model_batched(model, X, y, states, batch_size,
-                               classifier=False, y_mean=0.0, y_std=1.0):
+    return log_prob_and_grad
 
-    data_loader = NumpyLoader(NumpyData(X, y), batch_size=batch_size, shuffle=False)
+def make_minibatch_log_prob_and_grad_mixed(
+        likelihood_prior_and_grads_fn, num_batches):
+    """Make log-prob and grad function for mini-batch methods."""
+    @jax.jit
+    def log_prob_and_grad(dataset, params, gamma, net_state):
+        likelihood, likelihood_grad, prior, prior_grad, net_state = (
+            likelihood_prior_and_grads_fn(params, gamma, net_state, dataset))
 
-    y_preds = []
-    for batch_x, batch_y in data_loader:
-        batch_preds = apply_bnn_model(model, batch_x, batch_y, states, classifier)
-        y_preds.append(batch_preds)
+        log_prob = likelihood * num_batches + prior
+        grad = jax.tree_map(lambda gl, gp: gl * num_batches + gp,
+                            likelihood_grad, prior_grad)
+        return log_prob, grad, net_state
 
-    y_preds = np.concatenate(y_preds, axis=1)
-    y_preds = np.mean(y_preds, axis=0)
-    if classifier:
-        auc = roc_auc_score(y, y_preds)
-        acc = accuracy_score(y, y_preds > 0.5)
-        return auc, acc
-    else:
-        y_preds = y_preds * y_std + y_mean
-        score = jnp.sqrt(jnp.mean((y - y_preds)**2))
-        if np.isfinite(y_preds).all():
-            r2 = r2_score(y, y_preds)
-        else:
-            r2 = np.nan
-        return score, r2
+    return log_prob_and_grad
 
 
-def run_horsehoe_bnn_model(seed, config_file, X_train, X_test, y_train, y_test,
-                           epochs, batch_size, hyperparam_config, data_name,
-                           classification=False, show_pgbar=False):
-    with open(config_file, "r") as c:
-        horseshoe_bnn_config = yaml.load(c, yaml.FullLoader)
-        horseshoe_bnn_config['n_features'] = X_train.shape[-1]
-        horseshoe_bnn_config['timestamp'] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        horseshoe_bnn_config['dataset_name'] = data_name
+def make_bin_log_prob_and_grad(
+        likelihood_prior_and_grads_fn, num_batches):
+    """Make log-prob and grad function for binary latent variables"""
 
-    horseshoe_bnn_config["batch_size"] = batch_size
-    horseshoe_bnn_config["n_hidden_units"] = hyperparam_config["n_hidden"]
-    horseshoe_bnn_config["classification"] = classification
+    def log_prob_and_grad(gamma, params):
+        likelihood, likelihood_grad, prior, prior_grad, = (
+            likelihood_prior_and_grads_fn(gamma, params))
 
-    torch.manual_seed(seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # device = "cuda"
-    torch.set_default_tensor_type(torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor)
-    hyperparams = HorseshoeHyperparameters(**horseshoe_bnn_config)
-    hbnn_model = HorseshoeBNN(device, hyperparams)
-    optimizer = optim.Adam(hbnn_model.parameters(), lr=hyperparams.learning_rate)
+        log_prob = likelihood*num_batches + prior
+        grad = jax.tree_map(lambda gl, gp: gl + gp,
+                            likelihood_grad, prior_grad)
+        return log_prob, grad
 
-    mean_y_train, std_y_train = 0.0, 1.0
+    return log_prob_and_grad
 
-    dataset_train = Dataset(X_train, y_train, data_name)
-    dataset_test = Dataset(X_test, y_test, data_name)
 
-    if show_pgbar:
-        pgbar = tqdm(range(epochs))
-    else:
-        pgbar = range(epochs)
+def evaluate_metrics(preds, targets, metrics_fns):
+    """Evaluate performance metrics on predictions."""
+    stats = {}
+    for metric_name, metric_fn in metrics_fns.items():
+        stats[metric_name] = metric_fn(preds, targets)
+    return stats
 
-    for epoch in pgbar:
-        hbnn_model.train_model(dataset_train, epoch, optimizer, False)
 
-    _, _, _, _, ensemble_output = hbnn_model.predict(dataset_test, mean_y_train=mean_y_train, std_y_train=std_y_train)
+def make_sgd_train_epoch(net_apply, log_likelihood_fn, log_prior_fn, optimizer,
+                         num_batches):
+    """Make a training epoch function for SGD-like optimizers.
+    """
+    likelihood_prior_and_grads_fn = (
+        make_likelihood_prior_grad_fns(net_apply, log_likelihood_fn,
+                                       log_prior_fn))
 
-    if classification: #weird if statement to make work with the horse-shoe bnn code. In original code, only if it is
-        # regression task the output will be converted to numpy array
-        ensemble_output = ensemble_output.cpu().numpy()
+    log_prob_and_grad = make_minibatch_log_prob_and_grad(
+        likelihood_prior_and_grads_fn, num_batches)
 
-    if classification:
-        y_preds = jnp.mean(jax.nn.sigmoid(ensemble_output), axis=1)
-        score = roc_auc_score(y_test, y_preds)
-        acc = np.mean(y_test == (y_preds > 0.5))
-        return hbnn_model, score, acc
-    else:
-        score = jnp.sqrt(jnp.mean((y_test - jnp.mean(ensemble_output, axis=1))**2))
-        r2 = r2_score(y_test, jnp.mean(ensemble_output, axis=1))
-        return hbnn_model, score, r2
+    @jax.jit
+    def sgd_train_epoch_fn(params, net_state, opt_state, train_set, key):
+        n_data = train_set[0].shape[0]
+        batch_size = n_data // num_batches
+        indices = jax.random.permutation(key, jnp.arange(n_data))
+        indices = jax.tree_map(lambda x: x.reshape((num_batches, batch_size)),
+                               indices)
 
-def eval_sklearn_model(model, X, y, y_mean=0, y_std=1, classifier=False):
-    if classifier:
-        y_preds = model.predict_proba(X)[:,1]
-        auc = roc_auc_score(y, y_preds)
-        acc = accuracy_score(y, y_preds > 0.5)
-        return auc, acc
-    else:
-        y_preds = model.predict(X)
-        y_preds = y_preds * y_std + y_mean
-        rmse = jnp.sqrt(jnp.mean((y - y_preds)**2))
-        r2 = r2_score(y, y_preds)
-        return rmse, r2
+        def train_step(carry, batch_indices):
+            batch = jax.tree_map(lambda x: x[batch_indices], train_set)
+            params_, net_state_, opt_state_ = carry
+            loss, grad, net_state_ = log_prob_and_grad(
+                batch, params_, net_state_)
 
-def zero_out_score(model, X, y, params, gammas, m, lst):
-    params, gammas = tree_utils.tree_unstack(params), tree_utils.tree_unstack(gammas)
-    states = []
-    for param, gamma in zip(params, gammas):
-        states.append(TrainingState(param, gamma, None, None))
-    feat_idxs = lst[:m]
-    mask = np.zeros(X.shape[1])
-    mask[feat_idxs] = 1.0
-    X_mask = X @ np.diag(mask)
-    rmse, _ = score_bnn_model(model, X_mask, y, states)
-    return rmse
+            updates, opt_state_ = optimizer.update(grad, opt_state_)
+            params_ = optax.apply_updates(params_, updates)
+            return (params_, net_state_, opt_state_), loss
+
+        (params, net_state,
+         opt_state), losses = jax.lax.scan(train_step,
+                                           (params, net_state, opt_state), indices)
+
+        new_key, = jax.random.split(key, 1)
+        return losses, params, net_state, opt_state, new_key
+
+    def sgd_train_epoch(params, net_state, opt_state, train_set, key):
+        losses, params, net_state, opt_state, new_key = (
+            sgd_train_epoch_fn(params, net_state, opt_state, train_set, key))
+
+        # params, opt_state = map(tree_utils.get_first_elem_in_sharded_tree,
+        #                         [params, opt_state])
+        loss_avg = jnp.mean(losses)
+        return params, net_state, opt_state, loss_avg, new_key
+
+    return sgd_train_epoch
+
+
+def make_sgd_train_epoch_mixed(net_apply, log_likelihood_fn, log_prior_fn, optimizer,
+                               bin_loglikelihood_fn, bin_logprior_fn, bin_optimizer, num_batches):
+    """Make a training epoch function for SGD-like optimizers. Used for training a mixed support posterior
+    """
+    likelihood_prior_and_grads_fn = (
+        make_likelihood_prior_grad_mixed_fns(net_apply, log_likelihood_fn,
+                                       log_prior_fn))
+
+    bin_likelihood_prior_and_grads_fn = make_bin_likelihood_prior_grad_fns(bin_loglikelihood_fn,
+                                                                           bin_logprior_fn)
+
+    log_prob_and_grad = make_minibatch_log_prob_and_grad_mixed(
+        likelihood_prior_and_grads_fn, num_batches)
+
+    bin_log_prob_and_grad = make_bin_log_prob_and_grad(bin_likelihood_prior_and_grads_fn, num_batches)
+
+    @jax.jit
+    def sgd_train_epoch_fn(params, gamma, net_state, opt_state, bin_opt_state,
+                           train_set, key):
+        n_data = train_set[0].shape[0]
+        batch_size = n_data // num_batches
+        indices = jax.random.permutation(key, jnp.arange(n_data))
+        if n_data % batch_size != 0:
+            indices = indices[:batch_size*num_batches] # drop remainder
+        indices = jax.tree_map(lambda x: x.reshape((num_batches, batch_size)),
+                               indices)
+
+        def train_step(carry, batch_indices):
+            batch = jax.tree_map(lambda x: x[batch_indices], train_set)
+            params_, gamma_, net_state_, opt_state_, bin_opt_state_ = carry
+            # update the continuous weights
+            loss, grad, net_state_ = log_prob_and_grad(
+                batch, params_, gamma_, net_state_)
+
+            updates, opt_state_ = optimizer.update(grad, opt_state_)
+            params_ = optax.apply_updates(params_, updates)
+            # update the binary latent variables
+            bin_log_prob, bin_grad = bin_log_prob_and_grad(gamma_, params_)
+            bin_updates, bin_opt_state_ = bin_optimizer.update(gamma_, bin_grad, bin_opt_state_)
+            # gamma_ = (1 - gamma_) * bin_updates + gamma_ * (1 - bin_updates)
+            gamma_ = jax.tree_map(lambda g, b: (1 - g) * b + g * (1 - b), gamma_, bin_updates)
+            return (params_, gamma_, net_state_, opt_state_, bin_opt_state_), (loss, bin_log_prob)
+
+        (params, gamma, net_state,
+         opt_state, bin_opt_state), losses = jax.lax.scan(train_step,
+                                                          (params, gamma, net_state,
+                                                           opt_state, bin_opt_state), indices)
+
+        new_key, = jax.random.split(key, 1)
+        return (losses, params, gamma, net_state,
+                opt_state, bin_opt_state, new_key)
+
+    @jax.jit
+    def sgd_train_epoch(params, gamma, net_state, opt_state, bin_opt_state,
+                        train_set, key):
+        (losses, params, gamma, net_state,
+         opt_state, bin_opt_state, new_key) = (
+            sgd_train_epoch_fn(params, gamma, net_state, opt_state, bin_opt_state, train_set, key))
+        # params, opt_state = map(tree_utils.get_first_elem_in_sharded_tree,
+        #                         [params, opt_state])
+        # gamma, bin_opt_state = map(tree_utils.get_first_elem_in_sharded_tree,
+        #                            [gamma, bin_opt_state])
+        loss_avg = jnp.mean(losses[0])
+        bin_loss_avg = jnp.mean(losses[1])
+        return params, gamma, net_state, opt_state, bin_opt_state, loss_avg, bin_loss_avg, new_key
+
+    return sgd_train_epoch
+
+
+def make_get_predictions(activation_fn, num_batches=1, is_training=False):
+    """Make a function for getting predictions from a network."""
+
+    def get_predictions(net_apply, params, net_state, dataset):
+        batch_size = dataset[0].shape[0] // num_batches
+        dataset = jax.tree_map(
+            lambda x: x.reshape((num_batches, batch_size, *x.shape[1:])), dataset)
+
+        def get_batch_predictions(current_net_state, x):
+            y, current_net_state = net_apply(params, current_net_state, None, x,
+                                             is_training)
+            batch_predictions = activation_fn(y)
+            return current_net_state, batch_predictions
+
+        net_state, predictions = jax.lax.scan(get_batch_predictions, net_state,
+                                              dataset)
+        predictions = predictions.reshape(
+            (num_batches * batch_size, *predictions.shape[2:]))
+        return net_state, predictions
+
+    return get_predictions
+
+
+get_softmax_predictions = make_get_predictions(jax.nn.softmax)
+get_regression_gaussian_predictions = make_get_predictions(
+    losses.preprocess_network_outputs_gaussian)

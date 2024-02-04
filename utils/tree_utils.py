@@ -66,6 +66,15 @@ def get_first_elem_in_sharded_tree(tree):
 def tree_norm(a):
   return float(jnp.sqrt(sum([jnp.sum(p_a**2) for p_a in jax.tree_util.tree_leaves(a)])))
 
+def get_first_elem_in_sharded_tree(tree):
+  return jax.tree_map(lambda p: p[0], tree)
+
+def tree_norm(a):
+  return float(jnp.sqrt(sum([jnp.sum(p_a**2) for p_a in jax.tree_leaves(a)])))
+
+def tree_scalarmul(a, s):
+  return jax.tree_map(lambda e: e*s, a)
+
 
 def normal_like_tree(a, key):
   treedef = jax.tree_util.tree_structure(a)

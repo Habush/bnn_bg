@@ -36,11 +36,11 @@ def parse_args():
 
 
 drug_ids = [1007, 1558, 1199, 1191, 1089,
-           1168, 1013, 1088, 1080, 1084]    # Docetaxel, Lapatinib , Tamoxifen
+            1168, 1013, 1088, 1080, 1084]    # Docetaxel, Lapatinib , Tamoxifen
                                                 # Bortezomib, Oxaliplatin, Erlotinib, Nilotinib,
                                                 # Irinotecan, "Paclitaxel", "Rapamycin"
 
-
+# drug_ids = [1168, 1088, 1080]
 
 def run_single_drug(drug_id, args, seeds):
 

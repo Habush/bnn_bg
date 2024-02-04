@@ -5,6 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import pandas as pd
+import tensorflow_probability.substrates.jax as tfp
+tfd = tfp.distributions
 
 PRNGKey = Any
 
@@ -54,6 +56,22 @@ def make_step_size_fn(init_lr, schedule, alpha, n_samples,
             cycle_len = 10
 
         return make_cyclical_cosine_lr_schedule(init_lr, n_samples, cycle_len)
+    
+def get_prior(prior_name, scale):
+    if prior_name.lower() == "laplace":
+        dist = tfd.Laplace(0, scale)
+        return dist
+    if prior_name.lower() == "normal":
+        dist = tfd.Normal(0, scale)
+        return dist
+    if prior_name.lower() == "cauchy":
+        dist = tfd.Cauchy(0, scale)
+        return dist
+
+    if prior_name.lower() == "student_t":
+        dist = tfd.StudentT(df=2, loc=0, scale=scale)
+        return dist
+    raise ValueError(f"Unsupported prior {prior_name}")
 
 def build_network(X, net_intr, net_intr_rev):
     p = X.shape[1]

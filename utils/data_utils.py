@@ -7,7 +7,11 @@ import os
 import pandas as pd
 import torch
 import pathlib
+from enum import Enum
 
+class Task(Enum):
+  REGRESSION = "regression"
+  CLASSIFICATION = "classification"
 
 def numpy_collate(batch):
     if isinstance(batch[0], np.ndarray):

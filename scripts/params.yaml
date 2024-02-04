@@ -1,0 +1,8 @@
+lr: 0.0001
+bin_lr: 0.01
+n_iters: 5000
+burnin: 3000
+tau0: 0.001
+tau1: 0.5
+layer_dim: 64
+n_layers: 2

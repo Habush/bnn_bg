@@ -1,7 +1,6 @@
 import os
 import os.path
 import pathlib
-
 import optuna
 from netZooPy.panda import Panda
 from scipy import sparse
@@ -40,10 +39,11 @@ def get_result_df(seeds, save_dir, zero_out=False,
 def get_summary_results(seeds, drug_names, exp_dir,
                        min_highlight=False):
     drug_res_all = []
-    num_models = 5
+    # num_models = 5
+    num_models = 3
     for drug in drug_names:
         save_dir = f"{exp_dir}/{drug}"
-        drug_res_df = get_result_df(seeds, save_dir)
+        drug_res_df = get_result_df(seeds, save_dir, include_horseshoe=False, include_gnn=False)
         drug_name_col = [drug for _ in range(num_models * len(seeds))]
         drug_res_df.insert(0, column="drug", value=drug_name_col)
         drug_res_all.append(drug_res_df)
@@ -158,97 +158,98 @@ def cross_val_runs(seeds, X, y, tissue_motif_data, string_ppi, hgnc_map,
     gene_list = X.columns.to_list()
 
     for seed in tqdm(seeds):
-        bnn_rf_bg_dict = {"seed": [], "model": [], "test_rmse": [], "test_r2_score": []}
-        transformer = StandardScaler()
-        X_train_outer, X_train, X_val, X_test, \
-            y_train_outer, y_train, y_val, y_test, (train_indices, val_indices, _) = preprocess_data(seed, X, y, None,
-                                                                                                     transformer,
-                                                                                                     val_size=0.2,
-                                                                                                     test_size=0.2)
+        if not os.path.exists(f"{save_dir}/results/bnn_rf_bg_s_{seed}.csv"):
+            bnn_rf_bg_dict = {"seed": [], "model": [], "test_rmse": [], "test_r2_score": []}
+            transformer = StandardScaler()
+            X_train_outer, X_train, X_val, X_test, \
+                y_train_outer, y_train, y_val, y_test, (train_indices, val_indices, _) = preprocess_data(seed, X, y, None,
+                                                                                                         transformer,
+                                                                                                         val_size=0.2,
+                                                                                                         test_size=0.2)
 
-        graph_path, col_idx_path = f"{save_dir}/pandas/pandas_net_s_{seed}.npy", f"{save_dir}/pandas/pandas_col_idxs_s_{seed}.npy"
-        if os.path.exists(graph_path) and os.path.exists(col_idx_path):
-            J = np.load(graph_path)
-            col_idxs = np.load(col_idx_path)
+            graph_path, col_idx_path = f"{save_dir}/pandas/pandas_net_s_{seed}.npy", f"{save_dir}/pandas/pandas_col_idxs_s_{seed}.npy"
+            if os.path.exists(graph_path) and os.path.exists(col_idx_path):
+                J = np.load(graph_path)
+                col_idxs = np.load(col_idx_path)
 
-        else:
-            J, col_idxs = get_inferred_network(X_train_outer, tissue_motif_data, string_ppi, hgnc_map, gene_list)
-            np.save(graph_path, J)
-            np.save(col_idx_path, col_idxs)
+            else:
+                J, col_idxs = get_inferred_network(X_train_outer, tissue_motif_data, string_ppi, hgnc_map, gene_list)
+                np.save(graph_path, J)
+                np.save(col_idx_path, col_idxs)
 
-        J_zeros = np.zeros_like(J)
+            J_zeros = np.zeros_like(J)
 
-        X_train_outer, X_train, X_val, X_test = X_train_outer[:,col_idxs], X_train[:, col_idxs], \
-                                                X_val[:,col_idxs], X_test[:,col_idxs]
+            X_train_outer, X_train, X_val, X_test = X_train_outer[:,col_idxs], X_train[:, col_idxs], \
+                                                    X_val[:,col_idxs], X_test[:,col_idxs]
 
-        #BNN w/ BG
-        bnn_bg_states, bnn_bg_disc_states, bnn_bg_rmse, bnn_bg_r2 = run_bnn_model(seed, save_dir,
-                                                                                  X_train_outer, X_train, X_val,
-                                                                                  X_test, y_train_outer, y_train,
-                                                                                  y_val, y_test, J, configs, timeout,
-                                                                                  saved_config, bg=True)
-        params_bg_bnn = tree_utils.tree_stack(bnn_bg_states)
-        gammas_bg_bnn = tree_utils.tree_stack((bnn_bg_disc_states))
-        save_model(model_save_dir, seed, params_bg_bnn, gammas_bg_bnn, True)
+            #BNN w/ BG
+            bnn_bg_states, bnn_bg_disc_states, bnn_bg_rmse, bnn_bg_r2 = run_bnn_model(seed, save_dir,
+                                                                                      X_train_outer, X_train, X_val,
+                                                                                      X_test, y_train_outer, y_train,
+                                                                                      y_val, y_test, J, configs, timeout,
+                                                                                      saved_config, bg=True)
+            params_bg_bnn = tree_utils.tree_stack(bnn_bg_states)
+            gammas_bg_bnn = tree_utils.tree_stack((bnn_bg_disc_states))
+            save_model(model_save_dir, seed, params_bg_bnn, gammas_bg_bnn, True)
 
-        #BNN w/o BG
-        bnn_states, bnn_disc_states, bnn_rmse, bnn_r2 = run_bnn_model(seed, save_dir,
-                                                                          X_train_outer, X_train, X_val,
-                                                                          X_test, y_train_outer, y_train,
-                                                                          y_val, y_test, J_zeros, configs, n_trials,
-                                                                          saved_config, bg=False)
-        params_bnn = tree_utils.tree_stack(bnn_states)
-        gammas_bnn = tree_utils.tree_stack(bnn_disc_states)
-        save_model(model_save_dir, seed, params_bnn, gammas_bnn, False)
+            #BNN w/o BG
+            bnn_states, bnn_disc_states, bnn_rmse, bnn_r2 = run_bnn_model(seed, save_dir,
+                                                                              X_train_outer, X_train, X_val,
+                                                                              X_test, y_train_outer, y_train,
+                                                                              y_val, y_test, J_zeros, configs, n_trials,
+                                                                              saved_config, bg=False)
+            params_bnn = tree_utils.tree_stack(bnn_states)
+            gammas_bnn = tree_utils.tree_stack(bnn_disc_states)
+            save_model(model_save_dir, seed, params_bnn, gammas_bnn, False)
 
-        ## RF
-        rf_model_path = f"{save_dir}/checkpoints/rf_model_s_{seed}.pkl"
-        rf_config_path = f"{save_dir}/configs/rf_config_s_{seed}_optuna.pkl"
-        if saved_config and os.path.exists(rf_model_path):  # standard scaler
-            rf_model = pickle.load(open(rf_model_path, "rb"))
-        else:
-            sampler = optuna.samplers.TPESampler(seed=seed)
-            study = optuna.create_study(sampler=sampler)
-            study.optimize(lambda trial: objective_rf(trial, seed, X_train, X_val, y_train, y_val), timeout=timeout)
+            ## RF
+            rf_model_path = f"{save_dir}/checkpoints/rf_model_s_{seed}.pkl"
+            rf_config_path = f"{save_dir}/configs/rf_config_s_{seed}_optuna.pkl"
+            if saved_config and os.path.exists(rf_model_path):  # standard scaler
+                rf_model = pickle.load(open(rf_model_path, "rb"))
+            else:
+                sampler = optuna.samplers.TPESampler(seed=seed)
+                study = optuna.create_study(sampler=sampler)
+                study.optimize(lambda trial: objective_rf(trial, seed, X_train, X_val, y_train, y_val), timeout=timeout)
 
-            with open(f"{save_dir}/optuna/study_rf_s_{seed}.csv", "wb") as fp:
-                pickle.dump(study, fp)
+                with open(f"{save_dir}/optuna/study_rf_s_{seed}.csv", "wb") as fp:
+                    pickle.dump(study, fp)
+                    fp.flush()
+
+                rf_config = study.best_params
+                with open(rf_config_path, "wb") as fp:
+                    pickle.dump(rf_config, fp)
+                    fp.flush()
+                rf_model = RandomForestRegressor(**rf_config, random_state=seed)
+                rf_model.fit(X_train_outer, y_train_outer)
+                pickle.dump(rf_model, open(rf_model_path, "wb"))
+
+
+            rmse_test_rf, r2_test_rf = eval_sklearn_model(rf_model, X_test, y_test)
+
+            bnn_rf_bg_dict["seed"].append(seed)
+            bnn_rf_bg_dict["model"].append("RF")
+            bnn_rf_bg_dict["test_rmse"].append(rmse_test_rf)
+            bnn_rf_bg_dict["test_r2_score"].append(r2_test_rf)
+
+            bnn_rf_bg_dict["seed"].append(seed)
+            bnn_rf_bg_dict["model"].append("BNN w/o BG")
+            bnn_rf_bg_dict["test_rmse"].append(bnn_rmse)
+            bnn_rf_bg_dict["test_r2_score"].append(bnn_r2)
+
+            bnn_rf_bg_dict["seed"].append(seed)
+            bnn_rf_bg_dict["model"].append("BNN + BG")
+            bnn_rf_bg_dict["test_rmse"].append(bnn_bg_rmse)
+            bnn_rf_bg_dict["test_r2_score"].append(bnn_bg_r2)
+
+
+            print(f"RF scores - rmse: {rmse_test_rf}, r2: {r2_test_rf}")
+            print(f"BNN w/o scores - rmse: {bnn_rmse}, r2: {bnn_r2}")
+            print(f"BNN + BG scores - rmse: {bnn_bg_rmse}, r2: {bnn_bg_r2}")
+
+            with open(f"{save_dir}/results/bnn_rf_bg_s_{seed}.csv", "w") as fp:
+                pd.DataFrame(bnn_rf_bg_dict).to_csv(fp, index=False)
                 fp.flush()
-
-            rf_config = study.best_params
-            with open(rf_config_path, "wb") as fp:
-                pickle.dump(rf_config, fp)
-                fp.flush()
-            rf_model = RandomForestRegressor(**rf_config, random_state=seed)
-            rf_model.fit(X_train_outer, y_train_outer)
-            pickle.dump(rf_model, open(rf_model_path, "wb"))
-
-
-        rmse_test_rf, r2_test_rf = eval_sklearn_model(rf_model, X_test, y_test)
-
-        bnn_rf_bg_dict["seed"].append(seed)
-        bnn_rf_bg_dict["model"].append("RF")
-        bnn_rf_bg_dict["test_rmse"].append(rmse_test_rf)
-        bnn_rf_bg_dict["test_r2_score"].append(r2_test_rf)
-
-        bnn_rf_bg_dict["seed"].append(seed)
-        bnn_rf_bg_dict["model"].append("BNN w/o BG")
-        bnn_rf_bg_dict["test_rmse"].append(bnn_rmse)
-        bnn_rf_bg_dict["test_r2_score"].append(bnn_r2)
-
-        bnn_rf_bg_dict["seed"].append(seed)
-        bnn_rf_bg_dict["model"].append("BNN + BG")
-        bnn_rf_bg_dict["test_rmse"].append(bnn_bg_rmse)
-        bnn_rf_bg_dict["test_r2_score"].append(bnn_bg_r2)
-
-
-        print(f"RF scores - rmse: {rmse_test_rf}, r2: {r2_test_rf}")
-        print(f"BNN w/o scores - rmse: {bnn_rmse}, r2: {bnn_r2}")
-        print(f"BNN + BG scores - rmse: {bnn_bg_rmse}, r2: {bnn_bg_r2}")
-
-        with open(f"{save_dir}/results/bnn_rf_bg_s_{seed}.csv", "w") as fp:
-            pd.DataFrame(bnn_rf_bg_dict).to_csv(fp, index=False)
-            fp.flush()
 
     return print("Done")
 

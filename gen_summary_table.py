@@ -16,8 +16,10 @@ def parse_args():
     return parser.parse_args()
 
 
-drug_names = ["docetaxel", "lapatinib", "tamoxifen", "bortezomib", "oxaliplatin",
-                "erlotinib", "nilotinib", "irinotecan", "paclitaxel", "rapamycin"]
+# drug_names = ["docetaxel", "lapatinib", "tamoxifen", "bortezomib", "oxaliplatin",
+#                 "erlotinib", "nilotinib", "irinotecan", "paclitaxel", "rapamycin"]
+
+drug_names = ["rapamycin", "erlotinib", "docetaxel", "lapatinib", "bortezomib", "tamoxifen"]
 pub_data = ["bikeshare", "wine", "support2", "churn"]
 
 if __name__ == "__main__":

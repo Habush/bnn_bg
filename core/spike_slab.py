@@ -238,10 +238,10 @@ def spike_slab_inference(*, seed, step_sizes, tau0, tau1, a0, b0,
     #const schedules
 
     z_kernel_no_mh, z_opt_state_no_mh = get_discrete_kernel(seed, z_schedule, z_log_prob_fn,
-                                                disc_bin_sgld_gradient_update, z0,
+                                                disc_bin_sgld_gradient_update2, z0,
                                                 cat=False, mh=False)
     z_kernel_mh, z_opt_state_mh = get_discrete_kernel(seed, z_schedule, z_log_prob_fn,
-                                                disc_bin_sgld_gradient_update, z0,
+                                                disc_bin_sgld_gradient_update2, z0,
                                                 cat=False, mh=True)
 
     beta_kernel_no_mh, beta_opt_state_no_mh = get_continuous_kernel(seed, beta_schedule,
